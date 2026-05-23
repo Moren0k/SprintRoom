@@ -23,6 +23,7 @@ import type { SprintRoomEnv } from "../../../src/lib/env";
 const env: SprintRoomEnv = {
   insforgeUrl: "https://example.insforge.app",
   insforgeAnonKey: "anon",
+  insforgeApiKey: "api-key",
   sessionTokenSecret: "test-secret-with-enough-entropy",
   sessionTokenTtlSeconds: 60,
 };
