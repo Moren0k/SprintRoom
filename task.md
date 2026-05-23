@@ -520,3 +520,66 @@
 **Riesgos pendientes**:
 - Auditoria y mutacion funcional no son atomicas entre si si se ejecutan como llamadas SDK separadas.
 - Para atomicidad estricta futura, los flujos criticos deben moverse a RPC PostgreSQL o funcion serverless transaccional.
+
+## Estado frontend funcional
+
+**Fecha**: 2026-05-23
+
+**Auditoria inicial**:
+- El commit `Add SprintRoom landing experience` correspondia a una landing publica con demo visual y chatbot.
+- No existian pantallas funcionales para registro, login, dashboard, cuenta, proyectos, miembros, historias, tareas, comentarios ni rutas privadas.
+- No existia proteccion de rutas privadas ni resolucion de sesion en frontend.
+- Las unicas piezas visuales previas eran `components/demo-board.tsx` y `components/chatbot.tsx`; la experiencia de aplicacion no consumia APIs reales.
+
+**Pantallas funcionales completadas**:
+- `/`: landing publica existente, con demo visual y chatbot conectado a `POST /api/chat`.
+- `/register`: registro publico conectado a `POST /api/auth/register`.
+- `/login`: inicio de sesion conectado a `POST /api/auth/login` y cookie HttpOnly `sprintroom_session`.
+- `/dashboard`: resumen conectado a `GET /api/projects` y `GET /api/tasks`.
+- `/projects`: listado y creacion de proyectos conectados a `GET /api/projects` y `POST /api/projects`.
+- `/projects/[projectId]`: detalle, edicion documental, miembros, historias, tareas, comentarios y eliminaciones seguras conectadas a APIs reales.
+- `/tasks`: carga personal conectada a `GET /api/tasks`, detalle de tarea, comentarios y eliminacion segura.
+- `/account`: perfil conectado a `GET/PATCH /api/account` y alta administrativa conectada a `POST /api/admin/users` para administradores.
+
+**Proteccion y sesion**:
+- `proxy.ts` protege `/dashboard`, `/projects`, `/tasks` y `/account` exigiendo cookie de sesion.
+- `SessionProvider` valida la sesion real con `GET /api/account`; si la sesion falta o es invalida redirige a `/login`.
+- Logout usa `POST /api/auth/logout` y limpia la sesion desde el backend.
+
+**Componentes reutilizables agregados**:
+- `components/ui.tsx`: botones, tarjetas, campos, banners, estados vacios, barra de progreso y utilidades visuales.
+- `components/app-shell.tsx`: layout autenticado, navegacion y accion de logout.
+- `src/frontend/api-client.ts`: cliente HTTP tipado para el contrato `{ data }` y errores `{ error }`.
+- `src/frontend/types.ts`: DTOs frontend alineados con la capa de aplicacion.
+
+**Gaps de backend respetados sin inventar endpoints**:
+- No existe endpoint para listar o buscar usuarios por correo; agregar miembros usa UUID real.
+- No existe endpoint para cambiar rol de miembro.
+- No existe endpoint para editar historias de usuario.
+- No existe endpoint para actualizar estado o reasignar tareas despues de crearlas.
+- No existe endpoint para editar o eliminar comentarios.
+- No existe endpoint para consultar actividad reciente desde `audit_events`; el dashboard no muestra datos simulados.
+
+**Variables de entorno requeridas**:
+- `INSFORGE_URL`: backend InsForge usado por rutas API server-side.
+- `INSFORGE_ANON_KEY`: anon key InsForge usada por los adaptadores server-side.
+- `SESSION_TOKEN_SECRET`: secreto HMAC para firmar/verificar sesion.
+- `SESSION_TOKEN_TTL_SECONDS`: duracion de la cookie de sesion.
+- `OPENROUTER_API_KEY`: requerido solo para `POST /api/chat`.
+
+**Ejecucion local**:
+- Instalar dependencias con `npm install`.
+- Configurar `.env.local` usando `.env.example` como referencia, sin commitear secretos.
+- Levantar desarrollo con `npm run dev` y abrir `http://localhost:3000`.
+- Validar antes de entregar con `npm test`, `npm run typecheck`, `npm run lint` y `npm run build`.
+
+**Prueba manual documentada**:
+- Registro: crear usuario desde `/register`, confirmar redireccion a `/login`.
+- Login: iniciar sesion desde `/login`, confirmar redireccion a `/dashboard`.
+- Crear proyecto: usar `/projects`, crear proyecto y confirmar apertura de `/projects/[projectId]`.
+- Agregar miembro: usar UUID real de otro usuario en la seccion Miembros.
+- Crear historia: crear historia desde el detalle del proyecto.
+- Crear tarea: seleccionar historia, asignar miembros y crear tarea.
+- Comentar tarea: abrir detalle de tarea y agregar comentario.
+- Eliminacion segura: eliminar tarea, luego historia, luego proyecto escribiendo el nombre exacto.
+- Logout: usar `Salir` y confirmar redireccion a `/login`.
