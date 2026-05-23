@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SprintRoom
 
-## Getting Started
+Aplicacion web para organizar el trabajo de equipos mediante una jerarquia clara: la aplicacion contiene proyectos, cada proyecto contiene historias de usuario y cada historia contiene tareas.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Next.js** (App Router) + **React 19**
+- **TypeScript** estricto
+- **InsForge** como Backend-as-a-Service (PostgreSQL + auth + storage + functions). Ver [`AGENTS.md`](./AGENTS.md) para la documentacion del SDK y convenciones.
+- **Tailwind CSS** para estilos
+- **Vitest** para pruebas unitarias
+
+## Estructura del proyecto
+
+```
+app/                 # Rutas y vistas del App Router de Next.js
+docs/                # Documentacion funcional y decisiones de dominio
+migrations/          # Migraciones SQL ejecutadas en InsForge
+public/              # Assets estaticos
+src/
+  domain/            # Entidades, value objects, enums, eventos, politicas
+                     # y servicios de dominio. Sin dependencias externas.
+  application/       # Casos de uso (commands/queries), DTOs, contratos
+                     # de repositorio y errores de aplicacion.
+  lib/               # Utilidades compartidas: reloj del sistema, helpers,
+                     # adaptadores (p.ej. clientes InsForge).
+tests/
+  domain/            # Pruebas unitarias de la capa de dominio
+  application/       # Pruebas de casos de uso con repositorios in-memory
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Reglas de capa:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `src/domain` no depende de ninguna capa.
+- `src/application` depende solo de `src/domain` y de los contratos en `application/abstractions`.
+- `src/lib` (y futuras adaptaciones tipo `src/server`) son las unicas que pueden conocer InsForge u otra infraestructura.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Comandos
 
-## Learn More
+```bash
+npm install          # Instala dependencias
+npm run dev          # Levanta el servidor de desarrollo de Next.js
+npm run build        # Compila la aplicacion para produccion
+npm run start        # Sirve la build de produccion
+npm run lint         # Ejecuta ESLint
+npm run typecheck    # Verifica los tipos con TypeScript sin emitir
+npm test             # Ejecuta las pruebas con Vitest
+```
 
-To learn more about Next.js, take a look at the following resources:
+Abre [http://localhost:3000](http://localhost:3000) con tu navegador para ver el resultado en desarrollo.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Pruebas
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Las pruebas estan escritas con [Vitest](https://vitest.dev/) y cubren:
 
-## Deploy on Vercel
+- Value objects (validaciones, normalizacion)
+- Agregados (Project, UserStory, SprintTask, User)
+- Politicas de autorizacion y visibilidad
+- Servicios de dominio (calculo de progreso, guardas de eliminacion)
+- Casos de uso de aplicacion con repositorios in-memory
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Para ejecutarlas:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm test
+```
+
+## Documentacion adicional
+
+- [`docs/sprintroom_business_logic.md`](./docs/sprintroom_business_logic.md): logica de negocio derivada de Notion.
+- [`docs/sprintroom_domain_decisions.md`](./docs/sprintroom_domain_decisions.md): decisiones de dominio para resolver vacios funcionales.
+- [`docs/sprintroom_infrastructure_notes.md`](./docs/sprintroom_infrastructure_notes.md): limites y notas de infraestructura InsForge.
+- [`task.md`](./task.md): plan de ejecucion tecnico y backlog.
+- [`AGENTS.md`](./AGENTS.md): convenciones del proyecto y documentacion de InsForge.
