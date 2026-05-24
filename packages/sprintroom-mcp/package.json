@@ -12,11 +12,11 @@
   "homepage": "https://sprintroom.app",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR_ORG/sprintroom.git",
+    "url": "git+https://github.com/Moren0k/SprintRoom.git",
     "directory": "packages/sprintroom-mcp"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_ORG/sprintroom/issues"
+    "url": "https://github.com/Moren0k/SprintRoom/issues"
   },
   "license": "MIT",
   "type": "module",
