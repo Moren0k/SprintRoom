@@ -10,6 +10,7 @@ import {
   ErrorBanner,
   Field,
   PageHeader,
+  SectionHeader,
   Select,
   SuccessBanner,
   TextInput,
@@ -93,14 +94,14 @@ export default function AccountClient() {
       <PageHeader
         eyebrow="Cuenta"
         title="Perfil y sesion"
-        description="Datos del usuario autenticado resueltos por `/api/account`."
+        description="Actualiza tus datos personales y consulta la informacion de tu sesion."
       />
       <ErrorBanner message={error} />
       <SuccessBanner message={notice} />
 
       <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <Card>
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">Mi perfil</h2>
+          <SectionHeader title="Mi perfil" description="Mantén actualizados los datos con los que tu equipo te identifica." />
           <form onSubmit={updateProfile} className="mt-5 space-y-4">
             <Field label="Nombre completo">
               <TextInput value={fullName} onChange={(event) => setFullName(event.target.value)} />
@@ -108,29 +109,29 @@ export default function AccountClient() {
             <Field label="Correo electronico">
               <TextInput type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
             </Field>
-            <Button type="submit" disabled={busy}>Guardar perfil</Button>
+            <Button type="submit" disabled={busy || !fullName.trim() || !email.trim()}>Guardar perfil</Button>
           </form>
         </Card>
 
         <Card>
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">Datos de sesion</h2>
+          <SectionHeader title="Datos de sesion" description="Información de referencia para permisos y colaboración." />
           <dl className="mt-5 space-y-4 text-sm">
             <InfoRow label="Usuario ID" value={user.userId} />
             <InfoRow label="Rol global" value={user.systemRole} />
             <InfoRow label="Origen" value={user.origin} />
           </dl>
           <p className="mt-5 text-sm leading-6 text-[var(--muted)]">
-            Comparte el Usuario ID con propietarios de proyecto para que puedan agregarte como miembro. No existe endpoint de busqueda de usuarios por correo.
+            Comparte tu Usuario ID con propietarios de proyecto para que puedan agregarte como miembro.
           </p>
         </Card>
       </section>
 
       {user.systemRole === "Administrator" && (
         <Card>
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">Alta administrativa</h2>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            Flujo conectado a `POST /api/admin/users`. Disponible solo para administradores.
-          </p>
+          <SectionHeader
+            title="Alta administrativa"
+            description="Crea cuentas internas y asigna su rol global. Disponible solo para administradores."
+          />
           <form onSubmit={createAdministrativeUser} className="mt-5 grid gap-4 lg:grid-cols-2">
             <Field label="Nombre completo">
               <TextInput value={adminName} onChange={(event) => setAdminName(event.target.value)} />
@@ -148,12 +149,12 @@ export default function AccountClient() {
               </Select>
             </Field>
             <div className="lg:col-span-2">
-              <Button type="submit" disabled={busy}>Crear usuario</Button>
+              <Button type="submit" disabled={busy || !adminName.trim() || !adminEmail.trim() || adminPassword.length < 8}>Crear usuario</Button>
             </div>
           </form>
           {createdUserId.length > 0 && (
             <p className="mt-4 rounded-xl border border-[var(--hairline)] bg-[var(--background)] p-4 text-sm text-[var(--muted)]">
-              Usuario creado. UUID para agregar a proyectos: <span className="font-medium text-[var(--foreground)]">{createdUserId}</span>
+              Usuario creado. ID para agregar a proyectos: <span className="font-medium text-[var(--foreground)]">{createdUserId}</span>
             </p>
           )}
         </Card>

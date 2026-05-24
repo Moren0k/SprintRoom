@@ -48,10 +48,6 @@ export interface PasswordHasher {
   verify(plainTextPassword: string, passwordHash: string): boolean;
 }
 
-export interface SessionTokenFactory {
-  create(user: User): string;
-}
-
 export interface UnitOfWork {
   saveChanges(): Promise<void>;
 }

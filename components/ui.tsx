@@ -2,6 +2,7 @@ import Link from "next/link";
 import type {
   AnchorHTMLAttributes,
   ButtonHTMLAttributes,
+  HTMLAttributes,
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
@@ -56,18 +57,43 @@ export function LinkButton({
 export function Card({
   children,
   className,
-}: {
-  readonly children: ReactNode;
-  readonly className?: string;
-}) {
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { readonly children: ReactNode }) {
   return (
     <div
       className={classNames(
         "rounded-2xl border border-[var(--hairline)] bg-[var(--glass)] p-6 shadow-xs backdrop-blur-xl",
         className,
       )}
+      {...props}
     >
       {children}
+    </div>
+  );
+}
+
+export function SectionHeader({
+  title,
+  description,
+  actions,
+}: {
+  readonly title: string;
+  readonly description?: string;
+  readonly actions?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <h2 className="text-lg font-semibold tracking-tight text-[var(--foreground)]">
+          {title}
+        </h2>
+        {description !== undefined && (
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+            {description}
+          </p>
+        )}
+      </div>
+      {actions !== undefined && <div className="shrink-0">{actions}</div>}
     </div>
   );
 }
@@ -134,7 +160,7 @@ export function TextInput({
   return (
     <input
       className={classNames(
-        "w-full rounded-xl border border-[var(--hairline)] bg-[var(--background)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--muted)]",
+        "w-full rounded-xl border border-[var(--hairline)] bg-[var(--background)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] disabled:cursor-not-allowed disabled:opacity-60 focus:border-[var(--foreground)] focus:ring-2 focus:ring-[var(--foreground)]/10",
         className,
       )}
       {...props}
@@ -149,7 +175,7 @@ export function TextArea({
   return (
     <textarea
       className={classNames(
-        "min-h-28 w-full rounded-xl border border-[var(--hairline)] bg-[var(--background)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--muted)]",
+        "min-h-28 w-full rounded-xl border border-[var(--hairline)] bg-[var(--background)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] disabled:cursor-not-allowed disabled:opacity-60 focus:border-[var(--foreground)] focus:ring-2 focus:ring-[var(--foreground)]/10",
         className,
       )}
       {...props}
@@ -165,7 +191,7 @@ export function Select({
   return (
     <select
       className={classNames(
-        "w-full rounded-xl border border-[var(--hairline)] bg-[var(--background)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition focus:border-[var(--muted)]",
+        "w-full rounded-xl border border-[var(--hairline)] bg-[var(--background)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition disabled:cursor-not-allowed disabled:opacity-60 focus:border-[var(--foreground)] focus:ring-2 focus:ring-[var(--foreground)]/10",
         className,
       )}
       {...props}
@@ -178,7 +204,7 @@ export function Select({
 export function ErrorBanner({ message }: { readonly message: string }) {
   if (message.length === 0) return null;
   return (
-    <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-200">
+    <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-700 dark:text-red-200">
       {message}
     </div>
   );
@@ -187,7 +213,7 @@ export function ErrorBanner({ message }: { readonly message: string }) {
 export function SuccessBanner({ message }: { readonly message: string }) {
   if (message.length === 0) return null;
   return (
-    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-200">
+    <div role="status" aria-live="polite" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm leading-6 text-emerald-700 dark:text-emerald-200">
       {message}
     </div>
   );
@@ -225,11 +251,35 @@ export function ProgressBar({ value }: { readonly value: number }) {
   );
 }
 
-export function Pill({ children }: { readonly children: ReactNode }) {
+export function Pill({ children, className = "" }: { readonly children: ReactNode; readonly className?: string }) {
   return (
-    <span className="inline-flex rounded-full border border-[var(--hairline)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-medium text-[var(--muted)]">
+    <span className={`inline-flex rounded-full border border-[var(--hairline)] bg-[var(--glass-strong)] px-2.5 py-1 text-xs font-medium text-[var(--muted)] ${className}`}>
       {children}
     </span>
+  );
+}
+
+export const STATUS_PILL_COLORS: Record<string, string> = {
+  not_started: "border-yellow-200 bg-yellow-50 text-yellow-700 dark:border-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300",
+  in_progress: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300",
+  testing: "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-900/20 dark:text-purple-300",
+  review: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-900/20 dark:text-orange-300",
+  completed: "border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  not_started: "Sin Empezar",
+  in_progress: "En Desarrollo",
+  testing: "Probando",
+  review: "En Revisión",
+  completed: "Completada",
+};
+
+export function StatusPill({ status }: { readonly status: string }) {
+  return (
+    <Pill className={STATUS_PILL_COLORS[status] ?? ""}>
+      {STATUS_LABELS[status] ?? status}
+    </Pill>
   );
 }
 
@@ -252,7 +302,7 @@ export function classNames(
 
 function buttonClasses(variant: ButtonVariant): string {
   const base =
-    "inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition active:scale-[0.98]";
+    "inline-flex min-h-10 items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition outline-none active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]";
   if (variant === "primary") {
     return `${base} bg-[var(--foreground)] text-[var(--background)] hover:opacity-85`;
   }

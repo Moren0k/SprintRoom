@@ -36,6 +36,7 @@ export interface DashboardTaskItemDto {
   readonly userStoryTitle: string;
   readonly title: string;
   readonly description: string;
+  readonly status: string;
   readonly isCompleted: boolean;
   readonly assigneeIds: ReadonlyArray<string>;
   readonly commentCount: number;
@@ -250,6 +251,7 @@ export class InsForgeDashboardReadModel {
         title: task.title,
         description: task.description,
         isCompleted: task.is_completed,
+        status: task.status,
         assigneeIds: snapshot.assignments
           .filter((assignment) => assignment.task_id === task.id)
           .map((assignment) => assignment.user_id),

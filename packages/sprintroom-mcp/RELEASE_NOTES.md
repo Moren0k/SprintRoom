@@ -1,4 +1,9 @@
-# @sprintroom/mcp v1.0.1
+# @sprintroom/mcp v1.1.0
+
+## v1.1.0 — 2026-05-24
+- `tools/list` now fetches tool definitions in real-time from SprintRoom API (`/api/mcp`) instead of bundling them.
+- Removed `src/definitions.ts` — no more duplicate definitions to keep in sync.
+- Tool changes no longer require a package version bump (except for significant architectural changes).
 
 ## v1.0.1 — 2026-05-24
 - Fixed repository URL in package metadata (`YOUR_ORG` → `Moren0k/SprintRoom`)

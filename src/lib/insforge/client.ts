@@ -7,16 +7,20 @@ import {
 
 export type InsForgeClient = InsForgeSdkClientLike;
 
-export function createSprintRoomInsForgeClient(env: SprintRoomEnv = readSprintRoomEnv()): InsForgeClient {
+export function createSprintRoomInsForgeClient(
+  env: SprintRoomEnv = readSprintRoomEnv(),
+): InsForgeClient {
   return createClient({
     baseUrl: env.insforgeUrl,
-    anonKey: env.insforgeAnonKey,
+    anonKey: env.insforgeApiKey,
     isServerMode: true,
   }) as unknown as InsForgeClient;
 }
 
 export function createInsForgeDatabaseGateway(
-  client: InsForgeClient = createSprintRoomInsForgeClient(),
+  client?: InsForgeClient,
 ): SdkInsForgeDatabaseGateway {
-  return new SdkInsForgeDatabaseGateway(client);
+  return new SdkInsForgeDatabaseGateway(
+    client ?? createSprintRoomInsForgeClient(readSprintRoomEnv()),
+  );
 }

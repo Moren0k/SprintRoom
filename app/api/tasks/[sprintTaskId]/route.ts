@@ -1,4 +1,4 @@
-import { DeleteSprintTaskHandler, GetSprintTaskDetailHandler } from "../../../../src/application";
+import { DeleteSprintTaskHandler, GetSprintTaskDetailHandler, UpdateTaskStatusHandler } from "../../../../src/application";
 import { createAuthenticatedApplicationScope } from "../../../../src/server/application-scope";
 import { handleRouteError, noContent, ok, readJsonObject } from "../../../../src/server/http";
 import { requireString, requireUuid } from "../../../../src/server/validation";
@@ -43,6 +43,27 @@ export async function DELETE(request: Request, context: SprintTaskRouteContext):
       metadata: { commentsRetained: true },
     });
     return noContent();
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+export async function PATCH(request: Request, context: SprintTaskRouteContext): Promise<Response> {
+  try {
+    const sprintTaskId = requireUuid((await context.params).sprintTaskId, "sprintTaskId");
+    const body = await readJsonObject(request);
+    const scope = await createAuthenticatedApplicationScope(request);
+    const result = await new UpdateTaskStatusHandler(
+      scope.repositories.projects,
+      scope.repositories.sprintTasks,
+      scope.repositories.unitOfWork,
+      scope.clock,
+    ).handle({
+      requestContext: scope.requestContext,
+      sprintTaskId,
+      status: requireString(body, "status"),
+    });
+    return ok(result);
   } catch (error) {
     return handleRouteError(error);
   }

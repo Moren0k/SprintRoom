@@ -6,6 +6,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { apiRequest, getErrorMessage } from "@/src/frontend/api-client";
 import type { AuthResult } from "@/src/frontend/types";
 import { Button, Card, ErrorBanner, Field, SuccessBanner, TextInput } from "./ui";
+import { initiateOAuth } from "@/src/lib/auth/oauth-actions";
 
 export function LoginForm() {
   const router = useRouter();
@@ -51,6 +52,16 @@ export function LoginForm() {
     }
   }
 
+  async function signInWithGoogle() {
+    setError("");
+    setNotice("");
+    try {
+      await initiateOAuth("google");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
   return (
     <AuthFrame
       title="Inicia sesion"
@@ -67,6 +78,14 @@ export function LoginForm() {
       <form onSubmit={submit} className="space-y-4">
         <SuccessBanner message={notice} />
         <ErrorBanner message={error} />
+        <Button type="button" variant="secondary" className="w-full" disabled={loading} onClick={signInWithGoogle}>
+          Continuar con Google
+        </Button>
+        <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
+          <span className="h-px flex-1 bg-[var(--hairline)]" />
+          <span>o ingresa con correo</span>
+          <span className="h-px flex-1 bg-[var(--hairline)]" />
+        </div>
         <Field label="Correo electronico">
           <TextInput
             type="email"
@@ -128,6 +147,15 @@ export function RegisterForm() {
     }
   }
 
+  async function registerWithGoogle() {
+    setError("");
+    try {
+      await initiateOAuth("google");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
   return (
     <AuthFrame
       title="Crea tu cuenta"
@@ -143,6 +171,14 @@ export function RegisterForm() {
     >
       <form onSubmit={submit} className="space-y-4">
         <ErrorBanner message={error} />
+        <Button type="button" variant="secondary" className="w-full" disabled={loading} onClick={registerWithGoogle}>
+          Registrarme con Google
+        </Button>
+        <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
+          <span className="h-px flex-1 bg-[var(--hairline)]" />
+          <span>o crea una cuenta con correo</span>
+          <span className="h-px flex-1 bg-[var(--hairline)]" />
+        </div>
         <Field label="Nombre completo">
           <TextInput
             autoComplete="name"

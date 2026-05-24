@@ -29,9 +29,11 @@ import {
   fromAccountOriginCode,
   fromProjectRoleCode,
   fromSystemRoleCode,
+  fromTaskStatusCode,
   toAccountOriginCode,
   toProjectRoleCode,
   toSystemRoleCode,
+  toTaskStatusCode,
 } from "./schema";
 
 function toDate(value: string): Date {
@@ -162,7 +164,7 @@ export function sprintTaskFromRows(
     UserStoryId.from(row.user_story_id),
     WorkItemName.create(row.title, "tarea"),
     Description.create(row.description),
-    row.is_completed,
+    fromTaskStatusCode(row.status),
     toDate(row.created_on_utc),
     toDate(row.updated_on_utc),
     assignmentRows.map((assignment) => UserId.from(assignment.user_id)),
@@ -178,6 +180,7 @@ export function sprintTaskToRow(task: SprintTask): SprintTaskRow {
     title: task.title.value,
     description: task.description.value,
     is_completed: task.isCompleted,
+    status: toTaskStatusCode(task.status),
     created_on_utc: toIso(task.createdOnUtc),
     updated_on_utc: toIso(task.updatedOnUtc),
   };

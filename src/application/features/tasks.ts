@@ -2,6 +2,7 @@ import type { SprintTask } from "../../domain/aggregates/sprint-task";
 import { SprintTask as SprintTaskAggregate } from "../../domain/aggregates/sprint-task";
 import { PermissionAction } from "../../domain/enums/permission-action";
 import { SystemRole } from "../../domain/enums/system-role";
+import { TaskStatus } from "../../domain/enums/task-status";
 import { ProjectId } from "../../domain/ids/project-id";
 import { SprintTaskId } from "../../domain/ids/sprint-task-id";
 import { UserId } from "../../domain/ids/user-id";
@@ -41,6 +42,7 @@ export const TaskMappings = {
       userStoryId: task.userStoryId,
       title: task.title.value,
       description: task.description.value,
+      status: task.status,
       isCompleted: task.isCompleted,
       assigneeIds: task.assigneeIds.map((id) => id as string),
       commentCount: task.comments.length,
@@ -54,6 +56,7 @@ export const TaskMappings = {
       userStoryId: task.userStoryId,
       title: task.title.value,
       description: task.description.value,
+      status: task.status,
       isCompleted: task.isCompleted,
       assigneeIds: task.assigneeIds.map((id) => id as string),
       comments: task.comments.map((comment) => ({
@@ -266,6 +269,50 @@ export class GetSprintTaskDetailHandler
       query.requestContext,
       task.projectId,
     );
+    return TaskMappings.toDetailDto(task);
+  }
+}
+
+/* ======================== Cambiar estado de tarea ========================= */
+
+export interface UpdateTaskStatusCommand {
+  requestContext: RequestContext;
+  sprintTaskId: string;
+  status: string;
+}
+
+export class UpdateTaskStatusHandler
+  implements CommandHandler<UpdateTaskStatusCommand, TaskDetailDto>
+{
+  constructor(
+    private readonly projectRepository: ProjectRepository,
+    private readonly sprintTaskRepository: SprintTaskRepository,
+    private readonly unitOfWork: UnitOfWork,
+    private readonly clock: Clock,
+  ) {}
+
+  async handle(command: UpdateTaskStatusCommand): Promise<TaskDetailDto> {
+    const { status } = command;
+    if (!Object.values(TaskStatus).includes(status as TaskStatus)) {
+      throw new ApplicationError(`Estado de tarea invalido: ${status}.`);
+    }
+
+    const task = await this.sprintTaskRepository.getById(
+      SprintTaskId.from(command.sprintTaskId),
+    );
+    if (task === null) {
+      throw new ApplicationError("La tarea no existe.");
+    }
+
+    await ProjectAccess.loadProjectForVisibility(
+      this.projectRepository,
+      command.requestContext,
+      task.projectId,
+    );
+
+    task.updateStatus(status as TaskStatus, this.clock.utcNow);
+    await this.unitOfWork.saveChanges();
+
     return TaskMappings.toDetailDto(task);
   }
 }

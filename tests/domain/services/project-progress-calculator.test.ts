@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SprintTask } from "../../../src/domain/aggregates/sprint-task";
 import { UserStory } from "../../../src/domain/aggregates/user-story";
+import { TaskStatus } from "../../../src/domain/enums/task-status";
 import { ProjectId } from "../../../src/domain/ids/project-id";
 import { ProjectProgressCalculator } from "../../../src/domain/services/project-progress-calculator";
 import { Description } from "../../../src/domain/value-objects/description";
@@ -32,7 +33,7 @@ describe("ProjectProgressCalculator", () => {
       Description.create("A1"),
       now,
     );
-    taskA1.markCompleted(later);
+    taskA1.updateStatus(TaskStatus.Completed, later);
 
     const taskA2 = SprintTask.create(
       projectId,
@@ -49,7 +50,7 @@ describe("ProjectProgressCalculator", () => {
       Description.create("B1"),
       now,
     );
-    taskB1.markCompleted(later);
+    taskB1.updateStatus(TaskStatus.Completed, later);
 
     const progress = ProjectProgressCalculator.calculate(
       [storyA, storyB],

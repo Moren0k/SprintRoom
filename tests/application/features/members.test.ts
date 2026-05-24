@@ -7,6 +7,7 @@ import { Project } from "../../../src/domain/aggregates/project";
 import { SprintTask } from "../../../src/domain/aggregates/sprint-task";
 import { UserStory } from "../../../src/domain/aggregates/user-story";
 import { ProjectRole } from "../../../src/domain/enums/project-role";
+import { TaskStatus } from "../../../src/domain/enums/task-status";
 import { Description } from "../../../src/domain/value-objects/description";
 import { ExternalReference } from "../../../src/domain/value-objects/external-reference";
 import { ProjectName } from "../../../src/domain/value-objects/project-name";
@@ -93,7 +94,7 @@ describe("Members", () => {
       now,
     );
     task.assignUser(contributor.id, now);
-    task.markCompleted(new Date(now.getTime() + 60_000));
+    task.updateStatus(TaskStatus.Completed, new Date(now.getTime() + 60_000));
     await tasks.add(task);
 
     const handler = new GetProjectMemberDetailHandler(

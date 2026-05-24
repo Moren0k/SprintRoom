@@ -110,6 +110,26 @@ export class User extends AggregateRoot<UserId> {
     return user;
   }
 
+  static registerGoogleOAuth(
+    id: UserId,
+    fullName: PersonName,
+    email: EmailAddress,
+    passwordHash: string,
+    createdOnUtc: Date,
+  ): User {
+    const user = new User(
+      id,
+      fullName,
+      email,
+      normalizeHash(passwordHash),
+      SystemRole.Member,
+      AccountOrigin.GoogleOAuth,
+      createdOnUtc,
+    );
+    user.raise(new UserRegisteredDomainEvent(user.id, createdOnUtc));
+    return user;
+  }
+
   static rehydrate(
     id: UserId,
     fullName: PersonName,

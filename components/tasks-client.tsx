@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { apiRequest, getErrorMessage } from "@/src/frontend/api-client";
 import type { TaskDetail, TaskSummary } from "@/src/frontend/types";
+import { TASK_STATUS_LABELS } from "@/src/domain/enums/task-status";
 import {
   Button,
   Card,
@@ -11,7 +12,8 @@ import {
   ErrorBanner,
   LoadingBlock,
   PageHeader,
-  Pill,
+  SectionHeader,
+  STATUS_PILL_COLORS,
   SuccessBanner,
   TextInput,
 } from "./ui";
@@ -78,6 +80,20 @@ export default function TasksClient() {
     });
   }
 
+  async function updateTaskStatus(taskId: string, newStatus: string) {
+    await runMutation("Estado actualizado.", async () => {
+      await apiRequest(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (selectedTask?.sprintTaskId === taskId) {
+        const detail = await apiRequest<TaskDetail>(`/api/tasks/${taskId}`);
+        setSelectedTask(detail);
+      }
+      await reloadTasks();
+    });
+  }
+
   async function confirmDelete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (deleteTask === null) return;
@@ -118,7 +134,7 @@ export default function TasksClient() {
       <PageHeader
         eyebrow="Mis tareas"
         title="Carga de trabajo personal"
-        description="Esta vista consume `GET /api/tasks` sin filtros, que devuelve las tareas asignadas al usuario autenticado."
+        description="Consulta tus tareas asignadas, abre su proyecto y deja comentarios de seguimiento."
       />
       <ErrorBanner message={error} />
       <SuccessBanner message={notice} />
@@ -132,20 +148,28 @@ export default function TasksClient() {
             />
           ) : (
             tasks.map((task) => (
-              <Card key={task.sprintTaskId} className="p-5">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h2 className="font-semibold text-[var(--foreground)]">{task.title}</h2>
-                    <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+              <Card key={task.sprintTaskId} className="p-0">
+                <div className="space-y-4 p-5">
+                  <div className="space-y-2">
+                    <h2 className="text-base font-semibold leading-6 text-[var(--foreground)]">{task.title}</h2>
+                    <p className="text-sm leading-6 text-[var(--muted)]">
                       {task.description || "Sin descripcion."}
                     </p>
                   </div>
-                  <Pill>{task.isCompleted ? "Completada" : "Pendiente"}</Pill>
+
+                  <div className="rounded-xl border border-[var(--hairline)] bg-[var(--background)] p-3">
+                    <StatusSelector
+                      currentStatus={task.status}
+                      onChange={(newStatus) => updateTaskStatus(task.sprintTaskId, newStatus)}
+                      disabled={busy}
+                    />
+                  </div>
+
+                  <p className="text-xs font-medium text-[var(--muted)]">
+                    {task.commentCount} comentarios · {task.assigneeIds.length} asignados
+                  </p>
                 </div>
-                <p className="mt-3 text-xs text-[var(--muted)]">
-                  {task.commentCount} comentarios · {task.assigneeIds.length} asignados
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 border-t border-[var(--hairline)] px-5 py-4">
                   <Button variant="secondary" onClick={() => openTask(task.sprintTaskId)} disabled={busy}>
                     Ver detalle
                   </Button>
@@ -156,7 +180,7 @@ export default function TasksClient() {
                     Abrir proyecto
                   </Link>
                   <Button variant="ghost" onClick={() => setDeleteTask(task)} disabled={busy}>
-                    Eliminar
+                    Eliminar tarea
                   </Button>
                 </div>
               </Card>
@@ -167,19 +191,26 @@ export default function TasksClient() {
         <div className="space-y-4">
           {selectedTask === null ? (
             <Card>
-              <h2 className="text-lg font-semibold text-[var(--foreground)]">Detalle</h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                Selecciona una tarea para consultar comentarios y agregar seguimiento. La edicion de estado no se muestra porque no existe endpoint PATCH para tareas.
-              </p>
+              <SectionHeader
+                title="Detalle"
+                description="Selecciona una tarea para consultar comentarios, revisar contexto y agregar seguimiento."
+              />
             </Card>
           ) : (
             <Card>
               <div className="flex items-start justify-between gap-4">
-                <div>
+                <div className="min-w-0">
                   <h2 className="text-lg font-semibold text-[var(--foreground)]">{selectedTask.title}</h2>
                   <p className="mt-1 text-sm text-[var(--muted)]">{selectedTask.description || "Sin descripcion."}</p>
                 </div>
                 <Button variant="ghost" onClick={() => setSelectedTask(null)}>Cerrar</Button>
+              </div>
+              <div className="mt-4 rounded-xl border border-[var(--hairline)] bg-[var(--background)] p-3">
+                <StatusSelector
+                  currentStatus={selectedTask.status}
+                  onChange={(newStatus) => updateTaskStatus(selectedTask.sprintTaskId, newStatus)}
+                  disabled={busy}
+                />
               </div>
               <div className="mt-5 space-y-3">
                 {selectedTask.comments.length === 0 ? (
@@ -193,13 +224,13 @@ export default function TasksClient() {
                   ))
                 )}
               </div>
-              <form onSubmit={addComment} className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <form onSubmit={addComment} className="mt-5 flex flex-col gap-3 border-t border-[var(--hairline)] pt-5 sm:flex-row">
                 <TextInput
                   value={commentBody}
                   onChange={(event) => setCommentBody(event.target.value)}
-                  placeholder="Nuevo comentario"
+                  placeholder="Escribe un comentario de seguimiento"
                 />
-                <Button type="submit" disabled={busy || !commentBody.trim()}>Comentar</Button>
+                <Button type="submit" disabled={busy || !commentBody.trim()}>Agregar comentario</Button>
               </form>
             </Card>
           )}
@@ -208,16 +239,16 @@ export default function TasksClient() {
 
       {deleteTask !== null && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 backdrop-blur-sm">
-          <Card className="w-full max-w-md">
-            <h2 className="text-xl font-semibold text-[var(--foreground)]">Eliminar tarea</h2>
+          <Card className="w-full max-w-md" role="dialog" aria-modal="true" aria-labelledby="delete-task-title">
+            <h2 id="delete-task-title" className="text-xl font-semibold text-[var(--foreground)]">Eliminar tarea</h2>
             <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
               Escribe exactamente <span className="font-semibold text-[var(--foreground)]">{deleteTask.title}</span> para confirmar.
             </p>
             <form onSubmit={confirmDelete} className="mt-5 space-y-4">
-              <TextInput value={confirmationName} onChange={(event) => setConfirmationName(event.target.value)} />
+              <TextInput value={confirmationName} onChange={(event) => setConfirmationName(event.target.value)} aria-label="Nombre de la tarea para confirmar eliminacion" />
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={() => setDeleteTask(null)}>Cancelar</Button>
-                <Button type="submit" variant="danger" disabled={busy || confirmationName !== deleteTask.title}>Eliminar</Button>
+                <Button type="submit" variant="danger" disabled={busy || confirmationName !== deleteTask.title}>Eliminar tarea</Button>
               </div>
             </form>
           </Card>
@@ -234,4 +265,37 @@ function formatDate(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function StatusSelector({
+  currentStatus,
+  onChange,
+  disabled,
+}: {
+  readonly currentStatus: string;
+  readonly onChange: (status: string) => void;
+  readonly disabled: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Estado</span>
+      <div className="flex flex-wrap gap-2">
+        {Object.entries(TASK_STATUS_LABELS).map(([code, label]) => (
+          <button
+            key={code}
+            type="button"
+            disabled={disabled}
+            onClick={() => { if (code !== currentStatus) void onChange(code); }}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
+              code === currentStatus
+                ? `${STATUS_PILL_COLORS[code] ?? ""} border-current shadow-xs`
+                : "border-[var(--hairline)] bg-[var(--glass)] text-[var(--muted)] hover:bg-[var(--glass-strong)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }

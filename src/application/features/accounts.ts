@@ -1,5 +1,6 @@
 import { User } from "../../domain/aggregates/user";
 import { SystemRole } from "../../domain/enums/system-role";
+import { UserId } from "../../domain/ids/user-id";
 import { EmailAddress } from "../../domain/value-objects/email-address";
 import { PersonName } from "../../domain/value-objects/person-name";
 import { ApplicationError } from "../abstractions/application-error";
@@ -10,7 +11,6 @@ import type {
 import type {
   Clock,
   PasswordHasher,
-  SessionTokenFactory,
   UnitOfWork,
   UserRepository,
 } from "../abstractions/ports";
@@ -78,7 +78,6 @@ export class LoginHandler
   constructor(
     private readonly userRepository: UserRepository,
     private readonly passwordHasher: PasswordHasher,
-    private readonly sessionTokenFactory: SessionTokenFactory,
   ) {}
 
   async handle(command: LoginCommand): Promise<AuthenticationResultDto> {
@@ -91,11 +90,56 @@ export class LoginHandler
       throw new ApplicationError("Credenciales invalidas.");
     }
 
-    const token = this.sessionTokenFactory.create(user);
     return {
       userId: user.id,
       email: user.email.value,
-      sessionToken: token,
+      sessionToken: "",
+      requiresRedirectToLogin: false,
+    };
+  }
+}
+
+/* ========================== Inicio de sesion Google ======================= */
+
+export interface CompleteGoogleOAuthCommand {
+  insforgeUserId: string;
+  fullName: string;
+  email: string;
+}
+
+export class CompleteGoogleOAuthHandler
+  implements CommandHandler<CompleteGoogleOAuthCommand, AuthenticationResultDto>
+{
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly unitOfWork: UnitOfWork,
+    private readonly clock: Clock,
+  ) {}
+
+  async handle(command: CompleteGoogleOAuthCommand): Promise<AuthenticationResultDto> {
+    const email = EmailAddress.create(command.email);
+    const fullName = PersonName.create(command.fullName);
+    let user = await this.userRepository.getByEmail(email.value);
+
+    if (user === null) {
+      user = User.registerGoogleOAuth(
+        UserId.from(command.insforgeUserId),
+        fullName,
+        email,
+        `oauth:google:${command.insforgeUserId}`,
+        this.clock.utcNow,
+      );
+      await this.userRepository.add(user);
+    } else {
+      user.updateProfile(fullName, email, this.clock.utcNow);
+    }
+
+    await this.unitOfWork.saveChanges();
+
+    return {
+      userId: user.id,
+      email: user.email.value,
+      sessionToken: "",
       requiresRedirectToLogin: false,
     };
   }

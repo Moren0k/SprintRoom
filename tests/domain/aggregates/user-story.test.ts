@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SprintTask } from "../../../src/domain/aggregates/sprint-task";
 import { UserStory } from "../../../src/domain/aggregates/user-story";
 import { DomainError } from "../../../src/domain/errors/domain-error";
+import { TaskStatus } from "../../../src/domain/enums/task-status";
 import { ProjectId } from "../../../src/domain/ids/project-id";
 import { Description } from "../../../src/domain/value-objects/description";
 import { WorkItemName } from "../../../src/domain/value-objects/work-item-name";
@@ -24,7 +25,7 @@ describe("UserStory aggregate", () => {
       Description.create("Formulario"),
       now,
     );
-    taskA.markCompleted(new Date(now.getTime() + 60_000));
+    taskA.updateStatus(TaskStatus.Completed, new Date(now.getTime() + 60_000));
 
     const taskB = SprintTask.create(
       projectId,

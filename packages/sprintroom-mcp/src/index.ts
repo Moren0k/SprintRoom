@@ -1,13 +1,9 @@
 #!/usr/bin/env node
 
 import { createInterface } from "node:readline";
-// TODO: Refactor tools/list to fetch definitions from SprintRoom API (/api/mcp)
-// instead of bundling them in definitions.ts. This will eliminate the need to
-// manually sync definitions and bump the package version on every tool change.
-import { MCP_TOOL_DEFINITIONS } from "./definitions.js";
 
 const SERVER_NAME = "sprintroom-mcp";
-const SERVER_VERSION = "1.0.1";
+const SERVER_VERSION = "1.1.0";
 const PROTOCOL_VERSION = "0.1.0";
 
 function getEnv(name: string): string {
@@ -49,17 +45,16 @@ function handlePing(id: unknown): void {
   writeJson({ jsonrpc: "2.0", id, result: {} });
 }
 
-function handleToolsList(id: unknown): void {
+async function handleToolsList(id: unknown): Promise<void> {
+  const data = await proxyRequest({ method: "tools/list", params: {} });
+  if (data.error) {
+    writeJson({ jsonrpc: "2.0", id, error: data.error });
+    return;
+  }
   writeJson({
     jsonrpc: "2.0",
     id,
-    result: {
-      tools: MCP_TOOL_DEFINITIONS.map((t) => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-      })),
-    },
+    result: { tools: (data.result as { tools: unknown[] } | undefined)?.tools ?? [] },
   });
 }
 
@@ -67,49 +62,11 @@ async function handleToolsCall(
   id: unknown,
   params: Record<string, unknown>,
 ): Promise<void> {
-  const resp = await proxyToolsCall(params);
-  writeJson({ jsonrpc: "2.0", id, ...resp });
-}
-
-async function proxyToolsCall(
-  params: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  const url = `${API_URL}/api/mcp`;
-  const body = JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/call",
-    params,
-  });
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Project-Key": PROJECT_KEY,
-      },
-      body,
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Error de conexion con SprintRoom.";
-    logStderr(`proxy error: ${msg}`);
-    return toolErrorResult(`Error de conexion: ${msg}`);
-  }
-
-  let data: Record<string, unknown>;
-  try {
-    data = (await response.json()) as Record<string, unknown>;
-  } catch {
-    return toolErrorResult("Respuesta invalida del servidor SprintRoom.");
-  }
+  const data = await proxyRequest({ method: "tools/call", params });
 
   if (data.error) {
-    const err = data.error as Record<string, unknown>;
-    const code = typeof err.code === "number" ? err.code : -32000;
-    const message = typeof err.message === "string" ? err.message : "Error desconocido";
-    return { error: { code, message } };
+    writeJson({ jsonrpc: "2.0", id, error: data.error });
+    return;
   }
 
   const result = data.result;
@@ -119,16 +76,66 @@ async function proxyToolsCall(
       result !== null &&
       "content" in (result as Record<string, unknown>)
     ) {
-      return { result };
+      writeJson({ jsonrpc: "2.0", id, result });
+      return;
     }
-    return {
+    writeJson({
+      jsonrpc: "2.0",
+      id,
       result: {
         content: [{ type: "text", text: JSON.stringify(result) }],
       },
-    };
+    });
+    return;
   }
 
-  return toolErrorResult("Respuesta inesperada del servidor SprintRoom.");
+  writeJson({ jsonrpc: "2.0", id, ...toolErrorResult("Respuesta inesperada del servidor SprintRoom.") });
+}
+
+async function proxyRequest(opts: {
+  method: string;
+  params: Record<string, unknown>;
+}): Promise<{ result?: unknown; error?: { code: number; message: string } }> {
+  const url = `${API_URL}/api/mcp`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Project-Key": PROJECT_KEY,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: opts.method,
+        params: opts.params,
+      }),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Error de conexion con SprintRoom.";
+    logStderr(`proxy error: ${msg}`);
+    return { error: { code: -32000, message: `Error de conexion: ${msg}` } };
+  }
+
+  try {
+    const data = (await response.json()) as Record<string, unknown>;
+
+    if (data.error) {
+      const err = data.error as Record<string, unknown>;
+      return {
+        error: {
+          code: typeof err.code === "number" ? err.code : -32000,
+          message: typeof err.message === "string" ? err.message : "Error desconocido",
+        },
+      };
+    }
+
+    return { result: data.result };
+  } catch {
+    return { error: { code: -32000, message: "Respuesta invalida del servidor SprintRoom." } };
+  }
 }
 
 function isNotification(
@@ -178,7 +185,7 @@ async function handleLine(line: string): Promise<void> {
   } else if (method === "ping") {
     handlePing(id);
   } else if (method === "tools/list") {
-    handleToolsList(id);
+    await handleToolsList(id);
   } else if (method === "tools/call") {
     await handleToolsCall(id, params);
   } else {

@@ -1,12 +1,28 @@
 # Guía de Uso para Agentes de IA — MCP SprintRoom
 
-Esta guía describe cómo un agente de IA (Claude, Cursor, OpenCode) se conecta al endpoint MCP de SprintRoom para leer y modificar el backlog del proyecto.
+Esta guía describe cómo un agente de IA (Claude, Cursor, OpenCode) se conecta a SprintRoom para leer y modificar el backlog del proyecto.
 
 ---
 
-## Protocolo de Comunicación
+## Metodo recomendado: Paquete MCP publico
 
-El endpoint soporta **dos protocolos:**
+El metodo preferido es usar el paquete npm `@sprintroom/mcp` como servidor MCP local via stdio. Esto evita configurar headers HTTP manualmente y es compatible con OpenCode, Claude Desktop, Claude Code y Codex.
+
+```bash
+npx -y @sprintroom/mcp
+```
+
+Requiere dos variables de entorno:
+- `SPRINTROOM_API_URL` — URL base de la instancia SprintRoom
+- `SPRINTROOM_PROJECT_KEY` — clave de proyecto generada desde la UI
+
+No requiere credenciales de InsForge. Consulta la [documentacion en la UI](/docs) para ejemplos de configuracion en cada herramienta.
+
+---
+
+## Protocolo de Comunicación (HTTP directo)
+
+Si no puedes usar el paquete stdio, el endpoint HTTP soporta **dos protocolos:**
 
 ### A. HTTP API simplificada (usada por los prompts de la UI)
 

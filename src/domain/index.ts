@@ -19,6 +19,7 @@ export * from "./enums/account-origin";
 export * from "./enums/permission-action";
 export * from "./enums/project-role";
 export * from "./enums/system-role";
+export * from "./enums/task-status";
 
 export * from "./errors/domain-error";
 

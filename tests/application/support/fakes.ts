@@ -2,7 +2,6 @@ import type {
   Clock,
   PasswordHasher,
   ProjectRepository,
-  SessionTokenFactory,
   SprintTaskRepository,
   UnitOfWork,
   UserRepository,
@@ -115,12 +114,6 @@ export class FakePasswordHasher implements PasswordHasher {
   }
   verify(plainTextPassword: string, passwordHash: string): boolean {
     return this.hash(plainTextPassword) === passwordHash;
-  }
-}
-
-export class FakeSessionTokenFactory implements SessionTokenFactory {
-  create(user: User): string {
-    return `token::${user.id}`;
   }
 }
 

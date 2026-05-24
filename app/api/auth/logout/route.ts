@@ -1,8 +1,10 @@
-import { createExpiredSessionCookieValue } from "../../../../src/lib/auth";
-import { noContent } from "../../../../src/server/http";
+import { createInsForgeExpiredCookieHeaders } from "@/src/lib/insforge-cookies";
+import { noContent } from "@/src/server/http";
 
 export async function POST(): Promise<Response> {
   const response = noContent();
-  response.headers.set("Set-Cookie", createExpiredSessionCookieValue());
+  for (const cookieHeader of createInsForgeExpiredCookieHeaders()) {
+    response.headers.append("Set-Cookie", cookieHeader);
+  }
   return response;
 }

@@ -1,6 +1,7 @@
 import { AccountOrigin, type AccountOrigin as AccountOriginType } from "../../domain/enums/account-origin";
 import { ProjectRole, type ProjectRole as ProjectRoleType } from "../../domain/enums/project-role";
 import { SystemRole, type SystemRole as SystemRoleType } from "../../domain/enums/system-role";
+import { TaskStatus, type TaskStatus as TaskStatusType } from "../../domain/enums/task-status";
 import { PersistenceMappingError } from "./errors";
 
 export interface UserRow {
@@ -47,6 +48,7 @@ export interface SprintTaskRow {
   readonly title: string;
   readonly description: string;
   readonly is_completed: boolean;
+  readonly status: string;
   readonly created_on_utc: string;
   readonly updated_on_utc: string;
 }
@@ -61,6 +63,23 @@ export interface TaskCommentRow {
   readonly task_id: string;
   readonly author_id: string;
   readonly body: string;
+  readonly created_on_utc: string;
+}
+
+export interface ProjectKeyRow {
+  readonly id: string;
+  readonly project_id: string;
+  readonly key_hash: string;
+  readonly description: string;
+  readonly is_active: boolean;
+  readonly created_on_utc: string;
+}
+
+export interface TaskAgentNoteRow {
+  readonly id: string;
+  readonly project_id: string;
+  readonly task_id: string;
+  readonly content: string;
   readonly created_on_utc: string;
 }
 
@@ -93,6 +112,7 @@ const systemRoleToDb = new Map<SystemRoleType, number>([
 const accountOriginToDb = new Map<AccountOriginType, number>([
   [AccountOrigin.PublicRegistration, 1],
   [AccountOrigin.AdministrativeProvisioning, 2],
+  [AccountOrigin.GoogleOAuth, 3],
 ]);
 
 const projectRoleToDb = new Map<ProjectRoleType, number>([
@@ -141,4 +161,15 @@ export function toProjectRoleCode(value: ProjectRoleType): number {
 
 export function fromProjectRoleCode(value: number): ProjectRoleType {
   return mapFromDatabase(projectRoleToDb, value, "ProjectRole");
+}
+
+export function toTaskStatusCode(value: TaskStatusType): string {
+  return value;
+}
+
+export function fromTaskStatusCode(value: string): TaskStatusType {
+  if (Object.values(TaskStatus).includes(value as TaskStatusType)) {
+    return value as TaskStatusType;
+  }
+  throw new PersistenceMappingError(`Codigo de estado de tarea desconocido: ${value}.`);
 }

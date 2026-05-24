@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline";
-// TODO: Refactor tools/list to fetch definitions from SprintRoom API (/api/mcp)
-// instead of bundling them in definitions.ts. This will eliminate the need to
-// manually sync definitions and bump the package version on every tool change.
-import { MCP_TOOL_DEFINITIONS } from "./definitions.js";
 const SERVER_NAME = "sprintroom-mcp";
 const SERVER_VERSION = "1.0.1";
 const PROTOCOL_VERSION = "0.1.0";
@@ -38,31 +34,45 @@ function handleInitialize(id) {
 function handlePing(id) {
     writeJson({ jsonrpc: "2.0", id, result: {} });
 }
-function handleToolsList(id) {
+async function handleToolsList(id) {
+    const data = await proxyRequest({ method: "tools/list", params: {} });
+    if (data.error) {
+        writeJson({ jsonrpc: "2.0", id, error: data.error });
+        return;
+    }
     writeJson({
         jsonrpc: "2.0",
         id,
-        result: {
-            tools: MCP_TOOL_DEFINITIONS.map((t) => ({
-                name: t.name,
-                description: t.description,
-                inputSchema: t.inputSchema,
-            })),
-        },
+        result: { tools: data.result?.tools ?? [] },
     });
 }
 async function handleToolsCall(id, params) {
-    const resp = await proxyToolsCall(params);
-    writeJson({ jsonrpc: "2.0", id, ...resp });
+    const data = await proxyRequest({ method: "tools/call", params });
+    if (data.error) {
+        writeJson({ jsonrpc: "2.0", id, error: data.error });
+        return;
+    }
+    const result = data.result;
+    if (result !== undefined) {
+        if (typeof result === "object" &&
+            result !== null &&
+            "content" in result) {
+            writeJson({ jsonrpc: "2.0", id, result });
+            return;
+        }
+        writeJson({
+            jsonrpc: "2.0",
+            id,
+            result: {
+                content: [{ type: "text", text: JSON.stringify(result) }],
+            },
+        });
+        return;
+    }
+    writeJson({ jsonrpc: "2.0", id, ...toolErrorResult("Respuesta inesperada del servidor SprintRoom.") });
 }
-async function proxyToolsCall(params) {
+async function proxyRequest(opts) {
     const url = `${API_URL}/api/mcp`;
-    const body = JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params,
-    });
     let response;
     try {
         response = await fetch(url, {
@@ -71,41 +81,35 @@ async function proxyToolsCall(params) {
                 "Content-Type": "application/json",
                 "X-Project-Key": PROJECT_KEY,
             },
-            body,
+            body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 1,
+                method: opts.method,
+                params: opts.params,
+            }),
         });
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : "Error de conexion con SprintRoom.";
         logStderr(`proxy error: ${msg}`);
-        return toolErrorResult(`Error de conexion: ${msg}`);
+        return { error: { code: -32000, message: `Error de conexion: ${msg}` } };
     }
-    let data;
     try {
-        data = (await response.json());
+        const data = (await response.json());
+        if (data.error) {
+            const err = data.error;
+            return {
+                error: {
+                    code: typeof err.code === "number" ? err.code : -32000,
+                    message: typeof err.message === "string" ? err.message : "Error desconocido",
+                },
+            };
+        }
+        return { result: data.result };
     }
     catch {
-        return toolErrorResult("Respuesta invalida del servidor SprintRoom.");
+        return { error: { code: -32000, message: "Respuesta invalida del servidor SprintRoom." } };
     }
-    if (data.error) {
-        const err = data.error;
-        const code = typeof err.code === "number" ? err.code : -32000;
-        const message = typeof err.message === "string" ? err.message : "Error desconocido";
-        return { error: { code, message } };
-    }
-    const result = data.result;
-    if (result !== undefined) {
-        if (typeof result === "object" &&
-            result !== null &&
-            "content" in result) {
-            return { result };
-        }
-        return {
-            result: {
-                content: [{ type: "text", text: JSON.stringify(result) }],
-            },
-        };
-    }
-    return toolErrorResult("Respuesta inesperada del servidor SprintRoom.");
 }
 function isNotification(request) {
     return !("id" in request) || request.id === undefined;
@@ -148,7 +152,7 @@ async function handleLine(line) {
         handlePing(id);
     }
     else if (method === "tools/list") {
-        handleToolsList(id);
+        await handleToolsList(id);
     }
     else if (method === "tools/call") {
         await handleToolsCall(id, params);

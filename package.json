@@ -8,14 +8,17 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "mcp-server": "tsx scripts/mcp-server.ts"
   },
   "dependencies": {
     "@insforge/sdk": "^1.2.10",
     "next": "16.2.6",
     "openai": "^6.39.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@insforge/cli": "^0.1.81",

@@ -11,7 +11,6 @@ import { UserId } from "../../../src/domain/ids/user-id";
 import {
   FakeClock,
   FakePasswordHasher,
-  FakeSessionTokenFactory,
   FakeUnitOfWork,
   InMemoryUserRepository,
 } from "../support/fakes";
@@ -47,7 +46,6 @@ describe("Accounts", () => {
     const handler = new LoginHandler(
       users,
       new FakePasswordHasher(),
-      new FakeSessionTokenFactory(),
     );
 
     const result = await handler.handle({
@@ -55,7 +53,6 @@ describe("Accounts", () => {
       password: "secret",
     });
 
-    expect(result.sessionToken.startsWith("token::")).toBe(true);
     expect(result.userId).toBe(user.id);
   });
 

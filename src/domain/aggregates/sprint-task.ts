@@ -6,6 +6,7 @@ import { SprintTaskId } from "../ids/sprint-task-id";
 import { TaskCommentId } from "../ids/task-comment-id";
 import type { UserId } from "../ids/user-id";
 import type { UserStoryId } from "../ids/user-story-id";
+import { TaskStatus } from "../enums/task-status";
 import type { CommentBody } from "../value-objects/comment-body";
 import type { Description } from "../value-objects/description";
 import type { WorkItemName } from "../value-objects/work-item-name";
@@ -15,7 +16,7 @@ export class SprintTask extends AggregateRoot<SprintTaskId> {
   private readonly _userStoryId: UserStoryId;
   private _title: WorkItemName;
   private _description: Description;
-  private _isCompleted = false;
+  private _status: TaskStatus;
   private readonly _createdOnUtc: Date;
   private _updatedOnUtc: Date;
   private readonly _comments: TaskComment[] = [];
@@ -28,12 +29,14 @@ export class SprintTask extends AggregateRoot<SprintTaskId> {
     title: WorkItemName,
     description: Description,
     createdOnUtc: Date,
+    status: TaskStatus = TaskStatus.NotStarted,
   ) {
     super(id);
     this._projectId = projectId;
     this._userStoryId = userStoryId;
     this._title = title;
     this._description = description;
+    this._status = status;
     this._createdOnUtc = createdOnUtc;
     this._updatedOnUtc = createdOnUtc;
   }
@@ -50,8 +53,11 @@ export class SprintTask extends AggregateRoot<SprintTaskId> {
   get description(): Description {
     return this._description;
   }
+  get status(): TaskStatus {
+    return this._status;
+  }
   get isCompleted(): boolean {
-    return this._isCompleted;
+    return this._status === TaskStatus.Completed;
   }
   get createdOnUtc(): Date {
     return this._createdOnUtc;
@@ -80,6 +86,7 @@ export class SprintTask extends AggregateRoot<SprintTaskId> {
       title,
       description,
       createdOnUtc,
+      TaskStatus.NotStarted,
     );
   }
 
@@ -89,7 +96,7 @@ export class SprintTask extends AggregateRoot<SprintTaskId> {
     userStoryId: UserStoryId,
     title: WorkItemName,
     description: Description,
-    isCompleted: boolean,
+    status: TaskStatus,
     createdOnUtc: Date,
     updatedOnUtc: Date,
     assigneeIds: ReadonlyArray<UserId>,
@@ -102,8 +109,8 @@ export class SprintTask extends AggregateRoot<SprintTaskId> {
       title,
       description,
       createdOnUtc,
+      status,
     );
-    sprintTask._isCompleted = isCompleted;
     sprintTask._updatedOnUtc = updatedOnUtc;
     sprintTask._assigneeIds.push(...assigneeIds);
     sprintTask._comments.push(...comments);
@@ -116,13 +123,8 @@ export class SprintTask extends AggregateRoot<SprintTaskId> {
     this._updatedOnUtc = updatedOnUtc;
   }
 
-  markCompleted(updatedOnUtc: Date): void {
-    this._isCompleted = true;
-    this._updatedOnUtc = updatedOnUtc;
-  }
-
-  reopen(updatedOnUtc: Date): void {
-    this._isCompleted = false;
+  updateStatus(status: TaskStatus, updatedOnUtc: Date): void {
+    this._status = status;
     this._updatedOnUtc = updatedOnUtc;
   }
 

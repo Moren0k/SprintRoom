@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
   role: "user" | "bot";
@@ -87,14 +89,14 @@ export default function ChatBot() {
 
       <div className="fixed bottom-0 right-0 z-50 flex flex-col items-end sm:bottom-6 sm:right-6">
         {open && (
-          <div className="flex h-svh w-svw flex-col overflow-hidden border border-[var(--hairline)] bg-[var(--background)] shadow-2xl sm:h-auto sm:w-[400px] sm:rounded-2xl sm:backdrop-blur-xl">
+          <div className="flex h-svh w-svw flex-col overflow-hidden border border-[var(--hairline)] bg-[var(--background)] shadow-2xl sm:h-auto sm:w-[400px] sm:rounded-2xl sm:backdrop-blur-xl" role="dialog" aria-modal="true" aria-label="Asistente SprintRoom">
             <div className="flex items-center justify-between border-b border-[var(--hairline)] px-5 py-4">
               <span className="text-sm font-semibold text-[var(--foreground)]">
                 Asistente SprintRoom
               </span>
               <button
                 onClick={() => setOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] transition hover:bg-[var(--glass-strong)] hover:text-[var(--foreground)]"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] outline-none transition hover:bg-[var(--glass-strong)] hover:text-[var(--foreground)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25"
                 aria-label="Cerrar chat"
               >
                 <svg
@@ -120,13 +122,21 @@ export default function ChatBot() {
                   className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed sm:text-sm ${
+                    className={`max-w-[85%] overflow-hidden rounded-2xl px-4 py-2.5 text-sm leading-relaxed sm:text-sm ${
                       msg.role === "user"
                         ? "bg-[var(--glass-strong)] text-[var(--foreground)]"
                         : "border border-[var(--hairline)] bg-[var(--glass)] text-[var(--foreground)]"
                     }`}
                   >
-                    {msg.content}
+                    {msg.role === "user" ? (
+                      msg.content
+                    ) : (
+                      <div className="prose prose-sm max-w-none prose-headings:text-[var(--foreground)] prose-p:text-[var(--foreground)] prose-strong:text-[var(--foreground)] prose-code:text-[var(--foreground)] prose-code:bg-[var(--glass-strong)] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-[var(--glass-strong)] prose-pre:border prose-pre:border-[var(--hairline)] prose-li:text-[var(--foreground)] prose-a:text-[var(--foreground)] prose-a:underline">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -152,13 +162,13 @@ export default function ChatBot() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Escribe tu pregunta..."
-                className="flex-1 rounded-full border border-[var(--hairline)] bg-[var(--glass)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--muted)] sm:py-2"
+                className="flex-1 rounded-full border border-[var(--hairline)] bg-[var(--glass)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] disabled:opacity-60 focus:border-[var(--foreground)] focus:ring-2 focus:ring-[var(--foreground)]/10 sm:py-2"
                 disabled={loading}
               />
               <button
                 onClick={handleSend}
                 disabled={loading || !input.trim()}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--foreground)] text-[var(--background)] transition hover:opacity-80 disabled:opacity-40 sm:h-9 sm:w-9"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--foreground)] text-[var(--background)] outline-none transition hover:opacity-80 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] sm:h-9 sm:w-9"
                 aria-label="Enviar mensaje"
               >
                 <svg
@@ -182,7 +192,7 @@ export default function ChatBot() {
         {!open && (
           <button
             onClick={() => setOpen(true)}
-            className="mb-6 mr-6 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--foreground)] text-[var(--background)] shadow-xl transition hover:scale-105 active:scale-95 sm:mb-0 sm:mr-0"
+            className="mb-6 mr-6 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--foreground)] text-[var(--background)] shadow-xl outline-none transition hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] sm:mb-0 sm:mr-0"
             aria-label="Abrir chat"
           >
             <svg

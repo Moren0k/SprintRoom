@@ -1,18 +1,21 @@
-import { HmacSessionTokenFactory, HmacSessionTokenVerifier, Pbkdf2PasswordHasher } from "../lib/auth";
+import { cookies } from "next/headers";
+import { Pbkdf2PasswordHasher } from "../lib/auth";
 import { InsForgeAuditLogger } from "../lib/audit";
 import { createInsForgeDatabaseGateway, createInsForgeRepositoryScope } from "../lib/insforge";
 import { InsForgeDashboardReadModel } from "../lib/read-models";
 import { readSprintRoomEnv } from "../lib/env";
 import { SystemClock } from "../lib/system-clock";
 import type { RequestContext } from "../application";
-import { resolveRequestContextFromRequest } from "../lib/auth";
+import { setInsForgeSessionCookies } from "../lib/insforge-cookies";
+import {
+  resolveRequestSessionFromRequest,
+  type RefreshedSessionTokens,
+} from "../lib/auth";
 
 export interface ApplicationScope {
   readonly env: ReturnType<typeof readSprintRoomEnv>;
   readonly clock: SystemClock;
   readonly passwordHasher: Pbkdf2PasswordHasher;
-  readonly sessionTokenFactory: HmacSessionTokenFactory;
-  readonly sessionTokenVerifier: HmacSessionTokenVerifier;
   readonly repositories: ReturnType<typeof createInsForgeRepositoryScope>;
   readonly auditLogger: InsForgeAuditLogger;
   readonly dashboardReadModel: InsForgeDashboardReadModel;
@@ -20,6 +23,7 @@ export interface ApplicationScope {
 
 export interface AuthenticatedApplicationScope extends ApplicationScope {
   readonly requestContext: RequestContext;
+  readonly refreshedSessionTokens: RefreshedSessionTokens | null;
 }
 
 export function createApplicationScope(requestContext?: RequestContext): ApplicationScope {
@@ -34,8 +38,6 @@ export function createApplicationScope(requestContext?: RequestContext): Applica
     env,
     clock,
     passwordHasher: new Pbkdf2PasswordHasher(),
-    sessionTokenFactory: new HmacSessionTokenFactory(env),
-    sessionTokenVerifier: new HmacSessionTokenVerifier(env),
     repositories,
     auditLogger: new InsForgeAuditLogger(database),
     dashboardReadModel: new InsForgeDashboardReadModel(database),
@@ -46,12 +48,30 @@ export async function createAuthenticatedApplicationScope(
   request: Request,
 ): Promise<AuthenticatedApplicationScope> {
   const unauthenticatedScope = createApplicationScope();
-  const requestContext = await resolveRequestContextFromRequest(request, {
+  const resolvedSession = await resolveRequestSessionFromRequest(request, {
     userRepository: unauthenticatedScope.repositories.users,
-    sessionTokenVerifier: unauthenticatedScope.sessionTokenVerifier,
+    unitOfWork: unauthenticatedScope.repositories.unitOfWork,
+    clock: unauthenticatedScope.clock,
   });
+  const { requestContext } = resolvedSession;
+  await persistRefreshedSessionTokens(resolvedSession.refreshedSessionTokens);
   return {
     ...createApplicationScope(requestContext),
     requestContext,
+    refreshedSessionTokens: resolvedSession.refreshedSessionTokens,
   };
+}
+
+async function persistRefreshedSessionTokens(
+  tokens: RefreshedSessionTokens | null,
+): Promise<void> {
+  if (tokens === null) return;
+  const cookieStore = await cookies();
+  setInsForgeSessionCookies(
+    (name, value, options) => {
+      cookieStore.set(name, value, options);
+    },
+    tokens.accessToken,
+    tokens.refreshToken,
+  );
 }

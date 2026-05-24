@@ -14,6 +14,8 @@ import {
   PageHeader,
   Pill,
   ProgressBar,
+  SectionHeader,
+  StatusPill,
 } from "./ui";
 
 export default function DashboardClient() {
@@ -66,7 +68,7 @@ export default function DashboardClient() {
       <PageHeader
         eyebrow="Panel principal"
         title={`Hola, ${user.fullName.split(" ")[0] ?? user.fullName}`}
-        description="Resumen conectado a las API reales de proyectos y tareas personales."
+        description="Un resumen rapido de tus proyectos activos, tareas asignadas y avance general."
         actions={<LinkButton href="/projects">Gestionar proyectos</LinkButton>}
       />
       <ErrorBanner message={error} />
@@ -80,17 +82,15 @@ export default function DashboardClient() {
 
       <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <Card>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-[var(--foreground)]">Proyectos</h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                Avance calculado por el backend desde historias y tareas.
-              </p>
-            </div>
+          <SectionHeader
+            title="Proyectos"
+            description="Avance consolidado desde las historias y tareas de cada proyecto."
+            actions={
             <Link href="/projects" className="text-sm font-medium text-[var(--foreground)]">
               Ver todos
             </Link>
-          </div>
+            }
+          />
           <div className="mt-5 space-y-3">
             {projects.length === 0 ? (
               <EmptyState
@@ -127,10 +127,10 @@ export default function DashboardClient() {
         </Card>
 
         <Card>
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">Mis tareas</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Tareas asignadas al usuario autenticado.
-          </p>
+          <SectionHeader
+            title="Mis tareas"
+            description="Tu carga de trabajo pendiente y completada."
+          />
           <div className="mt-5 space-y-3">
             {tasks.length === 0 ? (
               <EmptyState
@@ -146,7 +146,7 @@ export default function DashboardClient() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <h3 className="text-sm font-medium text-[var(--foreground)]">{task.title}</h3>
-                    <Pill>{task.isCompleted ? "Completada" : "Pendiente"}</Pill>
+                    <StatusPill status={task.status} />
                   </div>
                   <p className="mt-2 text-xs text-[var(--muted)]">
                     {task.commentCount} comentarios
@@ -164,10 +164,10 @@ export default function DashboardClient() {
       </section>
 
       <Card>
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">Actividad reciente</h2>
-        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-          El backend registra auditoria en `audit_events`, pero no existe una API route publica para leer actividad reciente. No se muestra informacion simulada.
-        </p>
+        <SectionHeader
+          title="Actividad reciente"
+          description="Cuando haya novedades relevantes en tus proyectos, apareceran aqui para que puedas retomar el trabajo rapidamente."
+        />
       </Card>
     </div>
   );
@@ -176,7 +176,7 @@ export default function DashboardClient() {
 function MetricCard({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <Card className="p-5">
-      <p className="text-sm text-[var(--muted)]">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--muted)]">{label}</p>
       <p className="mt-2 text-3xl font-semibold tracking-tight text-[var(--foreground)]">
         {value}
       </p>

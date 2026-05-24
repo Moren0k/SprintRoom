@@ -187,21 +187,27 @@ curl -X POST https://sprintroom.app/api/mcp \
 
 ### Versionado y sincronizacion de herramientas
 
-Las definiciones de herramientas de MCP existen en **dos lugares**:
+**Limitacion actual:** Las definiciones de herramientas estan incrustadas en el paquete (`packages/sprintroom-mcp/src/definitions.ts`) y deben mantenerse sincronizadas manualmente con el backend (`src/lib/mcp/tools.ts`). Si las herramientas del backend cambian, la version del paquete debe incrementarse y publicarse una nueva edicion.
 
 | Origen | Ubicacion | Proposito |
 |--------|-----------|-----------|
 | Backend (fuente de verdad) | `src/lib/mcp/tools.ts` | Define esquemas, validacion y logica de negocio |
 | Public CLI (copia) | `packages/sprintroom-mcp/src/definitions.ts` | Responde `tools/list` sin llamar al backend |
 
-**Estrategia de versionado:**
-- `@sprintroom/mcp` usa versionado semantico (`major.minor.patch`).
+**Estrategia de versionado semantico:**
+- `@sprintroom/mcp` sigue semver (`major.minor.patch`).
+- **PATCH** — Bugfixes, documentacion, dependencias (`1.0.0 → 1.0.1`).
+- **MINOR** — Nuevas herramientas o parametros opcionales (`1.0.0 → 1.1.0`).
+- **MAJOR** — Breaking changes en herramientas existentes (`1.0.0 → 2.0.0`).
 - Cuando se agrega, modifica o elimina una herramienta en `src/lib/mcp/tools.ts`, se debe:
   1. Actualizar `packages/sprintroom-mcp/src/definitions.ts` con los mismos cambios.
-  2. Incrementar la version de `packages/sprintroom-mcp/package.json`.
-  3. Publicar una nueva version del paquete.
-- La version del paquete **debe** reflejar cambios en las definiciones de herramientas.
-- Usa `npm run build` dentro de `packages/sprintroom-mcp/` para compilar antes de publicar.
+  2. Incrementar la version en `packages/sprintroom-mcp/package.json`.
+  3. Ejecutar `cd packages/sprintroom-mcp && npm run build` para compilar.
+  4. Ejecutar `npm publish --dry-run` para verificar.
+  5. Ejecutar el smoke test desde un directorio limpio.
+  6. Publicar: `npm publish --access public`.
+
+**TODO:** Refactorizar el paquete publico para que `tools/list` se obtenga desde la API de SprintRoom (`/api/mcp`) en lugar de tener definiciones duplicadas. Esto eliminaria la necesidad de sincronizar manualmente las herramientas y publicar nuevas versiones por cambios en tools.
 
 ### Regla critica (aplica a los dos mecanismos stdio)
 

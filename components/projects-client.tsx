@@ -14,6 +14,7 @@ import {
   LoadingBlock,
   PageHeader,
   ProgressBar,
+  SectionHeader,
   SuccessBanner,
   TextArea,
   TextInput,
@@ -89,17 +90,17 @@ export default function ProjectsClient() {
       <PageHeader
         eyebrow="Proyectos"
         title="Gestiona el portafolio"
-        description="Listado y creacion conectados a `/api/projects`. Cada proyecto abre su espacio de miembros, historias y tareas."
+        description="Crea proyectos, revisa su avance y entra al espacio de trabajo de cada equipo."
       />
       <ErrorBanner message={error} />
       <SuccessBanner message={notice} />
 
       <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
         <Card>
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">Crear proyecto</h2>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            El usuario autenticado queda como propietario del proyecto.
-          </p>
+          <SectionHeader
+            title="Crear proyecto"
+            description="Quedaras como propietario y podras agregar miembros, historias y tareas despues de crearlo."
+          />
           <form onSubmit={createProject} className="mt-5 space-y-4">
             <Field label="Nombre">
               <TextInput
@@ -122,7 +123,7 @@ export default function ProjectsClient() {
                 placeholder="SR-2026"
               />
             </Field>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || !name.trim()}>
               {submitting ? "Creando..." : "Crear proyecto"}
             </Button>
           </form>
@@ -139,7 +140,7 @@ export default function ProjectsClient() {
               <Link
                 href={`/projects/${project.projectId}`}
                 key={project.projectId}
-                className="block rounded-2xl border border-[var(--hairline)] bg-[var(--glass)] p-5 shadow-xs backdrop-blur-xl transition hover:bg-[var(--glass-strong)]"
+                className="block rounded-2xl border border-[var(--hairline)] bg-[var(--glass)] p-5 shadow-xs outline-none backdrop-blur-xl transition hover:bg-[var(--glass-strong)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
               >
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>

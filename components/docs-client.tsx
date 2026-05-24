@@ -277,6 +277,21 @@ function ToolsDocs() {
         ))}
       </div>
 
+      {/* Versioning */}
+      <section className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+        <h3 className="text-sm font-semibold text-[var(--foreground)]">Versionado del paquete MCP</h3>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          <code className="text-[var(--foreground)]">@sprintroom/mcp</code> usa <strong>semver</strong>:
+          PATCH (bugfix), MINOR (nuevas herramientas), MAJOR (breaking changes).
+          Las definiciones de herramientas estan incrustadas en el paquete. Si cambian en el backend,
+          el paquete debe actualizarse y publicarse una nueva version.
+        </p>
+        <p className="mt-2 text-xs text-[var(--muted)]">
+          <strong>TODO:</strong> Refactorizar para que <code className="text-[var(--foreground)]">tools/list</code> consulte la API de SprintRoom
+          y eliminar la duplicacion de definiciones.
+        </p>
+      </section>
+
       {/* Statuses */}
       <section>
         <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Estados de tarea</h3>

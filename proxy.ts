@@ -1,9 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const SESSION_COOKIE_NAME = "sprintroom_session";
+const ACCESS_COOKIE_NAME = "insforge_access_token";
+const REFRESH_COOKIE_NAME = "insforge_refresh_token";
 
 export function proxy(request: NextRequest) {
-  if (!request.cookies.has(SESSION_COOKIE_NAME)) {
+  const hasSessionCookie =
+    request.cookies.has(ACCESS_COOKIE_NAME) || request.cookies.has(REFRESH_COOKIE_NAME);
+
+  if (!hasSessionCookie) {
     const url = request.nextUrl.clone();
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", `${url.pathname}${url.search}`);

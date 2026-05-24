@@ -659,6 +659,11 @@ function McpIntegrationCard({
                 <strong>Advertencia de seguridad:</strong> Nunca compartas la PROJECT_KEY en chats, commits o documentacion.
                 Si sospechas que fue comprometida, desactivala y genera una nueva desde esta seccion.
               </p>
+              <p className="text-xs text-[var(--muted)]">
+                <strong>Version:</strong> @sprintroom/mcp v1.0.0 usa definiciones de herramientas incrustadas.
+                Si las herramientas del backend cambian, el paquete debe actualizarse.
+                Sigue semver: PATCH (bugfix), MINOR (nuevas herramientas), MAJOR (breaking changes).
+              </p>
             </div>
           </details>
         </div>
@@ -812,24 +817,17 @@ function buildMcpPrompt({
   readonly projectKey?: string;
 }): string {
   const origin = typeof window === "undefined" ? "https://tu-dominio" : window.location.origin;
-  const keyLine = projectKey === undefined
-    ? "PROJECT_KEY=<pega-aqui-la-project-key-del-proyecto>"
-    : `PROJECT_KEY=${projectKey}`;
 
   return `You are working on SprintRoom for project "${projectName}".
 
 Configure the MCP:
 
-Endpoint: ${origin}/api/mcp
-Header: X-Project-Key
-${keyLine}
+Command: npx -y @sprintroom/mcp
+Environment:
+  SPRINTROOM_API_URL: ${origin}
+  SPRINTROOM_PROJECT_KEY: ${projectKey === undefined ? "<pega-aqui-la-project-key>" : projectKey}
 
-The MCP supports simple HTTP and JSON-RPC 2.0.
-
-First, call get_sprintroom_mcp_skill:
-
-HTTP: {"tool":"get_sprintroom_mcp_skill"}
-JSON-RPC: tools/call name="get_sprintroom_mcp_skill"
+First, call get_sprintroom_mcp_skill to get the SprintRoom MCP skill.
 
 Use the response as the source of truth. Create or update:
 
@@ -840,13 +838,13 @@ If the repo already uses .agents/ or .skills/, install sprintroom-mcp there inst
 
 Create or update AGENTS.md or AGENTES.md with this rule:
 
-“Before using SprintRoom MCP, every agent must read the sprintroom-mcp skill. The skill is the source of truth for tools, parameters, outputs, errors, and best practices. Do not invent tools, arguments, endpoints, states, commands, or behavior. If the MCP changes, update the skill in the same change.”
+"Before using SprintRoom MCP, every agent must read the sprintroom-mcp skill. The skill is the source of truth for tools, parameters, outputs, errors, and best practices. Do not invent tools, arguments, endpoints, states, commands, or behavior. If the MCP changes, update the skill in the same change."
 
 Rules:
 Use SKILL.md as the source of truth.
 Do not invent tools, parameters, states, commands, endpoints, or behavior.
 SprintRoom has no CLI, so do not create CLI instructions.
-Follow the project’s existing structure.
+Follow the project's existing structure.
 
 Finish by confirming:
 MCP configured.

@@ -256,7 +256,7 @@ export default function DemoBoard() {
                             selectedTask?.id === task.id ? null : task,
                           )
                         }
-                        className="w-full rounded-xl border border-[var(--hairline)] bg-[var(--background)] p-3 text-left shadow-xs transition hover:bg-[var(--glass)]"
+                        className="w-full rounded-xl border border-[var(--hairline)] bg-[var(--background)] p-3 text-left shadow-xs outline-none transition hover:bg-[var(--glass)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <span className="text-xs font-medium text-[var(--foreground)] leading-snug">

@@ -68,6 +68,7 @@ export interface TaskSummary {
   userStoryId: string;
   title: string;
   description: string;
+  status: string;
   isCompleted: boolean;
   assigneeIds: string[];
   commentCount: number;
@@ -86,6 +87,7 @@ export interface TaskDetail {
   userStoryId: string;
   title: string;
   description: string;
+  status: string;
   isCompleted: boolean;
   assigneeIds: string[];
   comments: TaskComment[];
@@ -102,4 +104,16 @@ export interface ProjectMemberDetail {
   assignedTasksCompletionRate: number;
   userStories: UserStorySummary[];
   assignedTasks: TaskSummary[];
+}
+
+export interface McpProjectKeySummary {
+  id: string;
+  description: string;
+  isActive: boolean;
+  createdOnUtc: string;
+}
+
+export interface McpProjectKeyCreated {
+  rawKey: string;
+  description: string;
 }

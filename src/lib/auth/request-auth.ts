@@ -1,9 +1,23 @@
 import { createRequestContext, type RequestContext } from "../../application/abstractions/request-context";
-import type { UserRepository } from "../../application/abstractions/ports";
+import type { Clock, UnitOfWork, UserRepository } from "../../application/abstractions/ports";
+import { User } from "../../domain/aggregates/user";
 import { UserId } from "../../domain/ids/user-id";
-import { HmacSessionTokenVerifier, SessionTokenError } from "./session-token";
+import { EmailAddress } from "../../domain/value-objects/email-address";
+import { PersonName } from "../../domain/value-objects/person-name";
+import { getAccessTokenFromCookies, getRefreshTokenFromCookies } from "../insforge-cookies";
+import { createInsForgeServerClient } from "../insforge-server";
 
-export const SESSION_COOKIE_NAME = "sprintroom_session";
+type InsForgeUser = { id: string; email: string; profile?: { name?: string } };
+
+export interface RefreshedSessionTokens {
+  readonly accessToken: string;
+  readonly refreshToken: string | null;
+}
+
+export interface ResolvedRequestSession {
+  readonly requestContext: RequestContext;
+  readonly refreshedSessionTokens: RefreshedSessionTokens | null;
+}
 
 export type AuthenticationErrorCode =
   | "missing_token"
@@ -23,63 +37,116 @@ export class AuthenticationError extends Error {
 
 export interface ResolveRequestContextDependencies {
   readonly userRepository: UserRepository;
-  readonly sessionTokenVerifier?: HmacSessionTokenVerifier;
+  readonly unitOfWork: UnitOfWork;
+  readonly clock: Clock;
 }
 
 export async function resolveRequestContextFromRequest(
   request: Request,
   dependencies: ResolveRequestContextDependencies,
 ): Promise<RequestContext> {
-  const token = getSessionTokenFromRequest(request);
-  if (token === null) {
-    throw new AuthenticationError("missing_token", "No se encontro una sesion activa.");
-  }
-  const verifier = dependencies.sessionTokenVerifier ?? new HmacSessionTokenVerifier();
-  try {
-    const payload = verifier.verify(token);
-    const user = await dependencies.userRepository.getById(UserId.from(payload.sub));
-    if (user === null) {
-      throw new AuthenticationError("user_not_found", "El usuario de la sesion no existe.");
-    }
-    return createRequestContext(user.id, user.systemRole);
-  } catch (error) {
-    if (error instanceof AuthenticationError) {
-      throw error;
-    }
-    if (error instanceof SessionTokenError) {
-      throw new AuthenticationError(
-        error.code === "expired" ? "expired_token" : "invalid_token",
-        error.message,
-      );
-    }
-    throw new AuthenticationError("invalid_token", "La sesion no es valida.");
-  }
+  return (await resolveRequestSessionFromRequest(request, dependencies)).requestContext;
 }
 
-export function getSessionTokenFromRequest(request: Request): string | null {
+export async function resolveRequestSessionFromRequest(
+  request: Request,
+  dependencies: ResolveRequestContextDependencies,
+): Promise<ResolvedRequestSession> {
+  const accessToken = getAccessTokenFromRequest(request);
+  if (accessToken === null) {
+    const refreshed = await tryRefreshSession(request, dependencies);
+    if (refreshed === null) {
+      throw new AuthenticationError("missing_token", "No se encontro una sesion activa.");
+    }
+    return refreshed;
+  }
+
+  const insforge = createInsForgeServerClient(accessToken);
+  const { data, error } = await insforge.auth.getCurrentUser();
+
+  if (error !== null || data?.user === null || data.user === undefined) {
+    const refreshed = await tryRefreshSession(request, dependencies);
+    if (refreshed === null) {
+      throw new AuthenticationError("invalid_token", "La sesion no es valida.");
+    }
+    return refreshed;
+  }
+
+  return {
+    requestContext: await createContextForInsForgeUser(data.user as InsForgeUser, dependencies),
+    refreshedSessionTokens: null,
+  };
+}
+
+async function createContextForInsForgeUser(
+  insforgeUser: InsForgeUser,
+  dependencies: ResolveRequestContextDependencies,
+): Promise<RequestContext> {
+  let sprintRoomUser = await dependencies.userRepository.getById(UserId.from(insforgeUser.id));
+
+  if (sprintRoomUser === null) {
+    sprintRoomUser = await dependencies.userRepository.getByEmail(insforgeUser.email.trim());
+    if (sprintRoomUser !== null) {
+      sprintRoomUser.updateProfile(
+        sprintRoomUser.fullName,
+        sprintRoomUser.email,
+        dependencies.clock.utcNow,
+      );
+      await dependencies.unitOfWork.saveChanges();
+    } else {
+      sprintRoomUser = User.registerGoogleOAuth(
+        UserId.from(insforgeUser.id),
+        PersonName.create(insforgeUser.profile?.name ?? insforgeUser.email),
+        EmailAddress.create(insforgeUser.email),
+        `insforge:auto:${insforgeUser.id}`,
+        dependencies.clock.utcNow,
+      );
+      await dependencies.userRepository.add(sprintRoomUser);
+      await dependencies.unitOfWork.saveChanges();
+    }
+  }
+
+  return createRequestContext(sprintRoomUser.id, sprintRoomUser.systemRole);
+}
+
+async function tryRefreshSession(
+  request: Request,
+  dependencies: ResolveRequestContextDependencies,
+): Promise<ResolvedRequestSession | null> {
+  const refreshToken = getRefreshTokenFromCookies(request.headers.get("cookie"));
+  if (refreshToken === null) return null;
+
+  const insforge = createInsForgeServerClient();
+  const { data, error } = await insforge.auth.refreshSession({ refreshToken });
+  if (
+    error !== null ||
+    data === null ||
+    data.user === null ||
+    data.user === undefined ||
+    typeof data.accessToken !== "string" ||
+    data.accessToken.length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    requestContext: await createContextForInsForgeUser(data.user as InsForgeUser, dependencies),
+    refreshedSessionTokens: {
+      accessToken: data.accessToken,
+      refreshToken: typeof data.refreshToken === "string" && data.refreshToken.length > 0
+        ? data.refreshToken
+        : null,
+    },
+  };
+}
+
+export function getAccessTokenFromRequest(request: Request): string | null {
   const authorization = request.headers.get("authorization");
   if (authorization?.startsWith("Bearer ") === true) {
     const token = authorization.slice("Bearer ".length).trim();
     return token.length > 0 ? token : null;
   }
-  return parseCookieHeader(request.headers.get("cookie")).get(SESSION_COOKIE_NAME) ?? null;
-}
-
-export function createSessionCookieValue(token: string, maxAgeSeconds: number): string {
-  return [
-    `${SESSION_COOKIE_NAME}=${token}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${maxAgeSeconds}`,
-    process.env.NODE_ENV === "production" ? "Secure" : "",
-  ]
-    .filter(Boolean)
-    .join("; ");
-}
-
-export function createExpiredSessionCookieValue(): string {
-  return `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+  return getAccessTokenFromCookies(request.headers.get("cookie"));
 }
 
 export function parseCookieHeader(cookieHeader: string | null): Map<string, string> {

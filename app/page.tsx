@@ -19,14 +19,14 @@ export default function HomePage() {
           <div className="flex items-center gap-3 text-xs text-[var(--muted)] sm:text-sm">
             <Link
               href="/register"
-              className="transition hover:text-[var(--foreground)]"
+              className="rounded-full px-2 py-1 transition hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25"
             >
               Crear cuenta gratis
             </Link>
             <span className="text-[var(--hairline)]">|</span>
             <Link
               href="/login"
-              className="transition hover:text-[var(--foreground)]"
+              className="rounded-full px-2 py-1 transition hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25"
             >
               Iniciar sesion
             </Link>
@@ -244,13 +244,13 @@ export default function HomePage() {
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link
                 href="/register"
-                className="inline-flex items-center justify-center rounded-full border border-[var(--hairline)] bg-[var(--glass)] px-7 py-3 text-sm font-medium text-[var(--foreground)] shadow-xs backdrop-blur-xl transition hover:bg-[var(--glass-strong)] active:scale-[0.97]"
+                className="inline-flex items-center justify-center rounded-full border border-[var(--hairline)] bg-[var(--glass)] px-7 py-3 text-sm font-medium text-[var(--foreground)] shadow-xs outline-none backdrop-blur-xl transition hover:bg-[var(--glass-strong)] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
               >
                 Crear cuenta gratis
               </Link>
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center rounded-full border border-[var(--hairline)] bg-transparent px-7 py-3 text-sm font-medium text-[var(--foreground)] backdrop-blur-xl transition hover:bg-[var(--glass)] active:scale-[0.97]"
+                className="inline-flex items-center justify-center rounded-full border border-[var(--hairline)] bg-transparent px-7 py-3 text-sm font-medium text-[var(--foreground)] outline-none backdrop-blur-xl transition hover:bg-[var(--glass)] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
               >
                 Iniciar sesion
               </Link>

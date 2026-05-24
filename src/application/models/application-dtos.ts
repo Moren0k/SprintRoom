@@ -87,6 +87,7 @@ export interface TaskSummaryDto {
   userStoryId: string;
   title: string;
   description: string;
+  status: string;
   isCompleted: boolean;
   assigneeIds: ReadonlyArray<string>;
   commentCount: number;
@@ -105,6 +106,7 @@ export interface TaskDetailDto {
   userStoryId: string;
   title: string;
   description: string;
+  status: string;
   isCompleted: boolean;
   assigneeIds: ReadonlyArray<string>;
   comments: ReadonlyArray<TaskCommentDto>;
