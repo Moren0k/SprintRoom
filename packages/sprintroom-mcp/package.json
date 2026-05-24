@@ -1,0 +1,42 @@
+{
+  "name": "@sprintroom/mcp",
+  "version": "1.0.0",
+  "description": "MCP server for SprintRoom — access project backlog, user stories, and tasks via the Model Context Protocol",
+  "keywords": [
+    "sprintroom",
+    "mcp",
+    "model-context-protocol",
+    "project-management",
+    "backlog"
+  ],
+  "homepage": "https://sprintroom.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_ORG/sprintroom.git",
+    "directory": "packages/sprintroom-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_ORG/sprintroom/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "sprintroom-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}

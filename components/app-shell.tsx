@@ -8,8 +8,10 @@ import { Button, classNames } from "./ui";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/imagine", label: "Imagina" },
   { href: "/projects", label: "Proyectos" },
   { href: "/tasks", label: "Mis tareas" },
+  { href: "/docs", label: "Docs" },
   { href: "/account", label: "Cuenta" },
 ] as const;
 
@@ -48,8 +50,9 @@ function ShellFrame({ children }: { readonly children: ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-current={active ? "page" : undefined}
                   className={classNames(
-                    "rounded-full px-4 py-2 text-sm font-medium transition",
+                    "rounded-full px-4 py-2 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
                     active
                       ? "bg-[var(--foreground)] text-[var(--background)]"
                       : "text-[var(--muted)] hover:bg-[var(--glass)] hover:text-[var(--foreground)]",
@@ -73,7 +76,7 @@ function ShellFrame({ children }: { readonly children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 pb-8 pt-4 sm:px-6 lg:px-8">
         {children}
       </main>
     </div>

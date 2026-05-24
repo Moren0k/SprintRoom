@@ -1,14 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { apiRequest, getErrorMessage } from "@/src/frontend/api-client";
 import type {
+  McpProjectKeyCreated,
+  McpProjectKeySummary,
   ProjectDetail,
   ProjectMemberDetail,
   ProjectRole,
-  TaskDetail,
-  TaskSummary,
   UserStoryDetail,
   UserStorySummary,
 } from "@/src/frontend/types";
@@ -33,13 +34,12 @@ const PROJECT_ROLES: ProjectRole[] = ["Viewer", "Contributor", "Maintainer", "Ow
 interface ProjectBundle {
   readonly project: ProjectDetail;
   readonly stories: UserStorySummary[];
-  readonly tasks: TaskSummary[];
 }
 
 type DeleteTarget =
   | { readonly kind: "project"; readonly name: string; readonly endpoint: string }
   | { readonly kind: "story"; readonly name: string; readonly endpoint: string }
-  | { readonly kind: "task"; readonly name: string; readonly endpoint: string };
+  | { readonly kind: "key"; readonly name: string; readonly endpoint: string };
 
 export default function ProjectDetailClient({
   projectId,
@@ -49,9 +49,9 @@ export default function ProjectDetailClient({
   const router = useRouter();
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [stories, setStories] = useState<UserStorySummary[]>([]);
-  const [tasks, setTasks] = useState<TaskSummary[]>([]);
-  const [selectedTask, setSelectedTask] = useState<TaskDetail | null>(null);
   const [memberDetail, setMemberDetail] = useState<ProjectMemberDetail | null>(null);
+  const [mcpKeys, setMcpKeys] = useState<McpProjectKeySummary[]>([]);
+  const [newMcpKey, setNewMcpKey] = useState<McpProjectKeyCreated | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -64,11 +64,7 @@ export default function ProjectDetailClient({
   const [memberRole, setMemberRole] = useState<ProjectRole>("Contributor");
   const [storyTitle, setStoryTitle] = useState("");
   const [storyDescription, setStoryDescription] = useState("");
-  const [taskStoryId, setTaskStoryId] = useState("");
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDescription, setTaskDescription] = useState("");
-  const [taskAssigneeIds, setTaskAssigneeIds] = useState<string[]>([]);
-  const [commentBody, setCommentBody] = useState("");
+  const [mcpDescription, setMcpDescription] = useState("Agente IA del proyecto");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [confirmationName, setConfirmationName] = useState("");
 
@@ -79,9 +75,13 @@ export default function ProjectDetailClient({
       setLoading(true);
       setError("");
       try {
-        const bundle = await fetchProjectBundle(projectId);
+        const [bundle, keys] = await Promise.all([
+          fetchProjectBundle(projectId),
+          fetchMcpKeys(projectId),
+        ]);
         if (cancelled) return;
         applyBundle(bundle);
+        setMcpKeys(keys);
       } catch (err) {
         if (!cancelled) setError(getErrorMessage(err));
       } finally {
@@ -98,20 +98,18 @@ export default function ProjectDetailClient({
   function applyBundle(bundle: ProjectBundle) {
     setProject(bundle.project);
     setStories(bundle.stories);
-    setTasks(bundle.tasks);
     setEditName(bundle.project.name);
     setEditDescription(bundle.project.description);
     setEditReference(bundle.project.externalReference);
-    setTaskStoryId((current) =>
-      bundle.stories.some((story) => story.userStoryId === current)
-        ? current
-        : bundle.stories[0]?.userStoryId || "",
-    );
   }
 
   async function reload() {
-    const bundle = await fetchProjectBundle(projectId);
+    const [bundle, keys] = await Promise.all([
+      fetchProjectBundle(projectId),
+      fetchMcpKeys(projectId),
+    ]);
     applyBundle(bundle);
+    setMcpKeys(keys);
   }
 
   async function saveProject(event: FormEvent<HTMLFormElement>) {
@@ -187,60 +185,56 @@ export default function ProjectDetailClient({
       );
       setStoryTitle("");
       setStoryDescription("");
-      setTaskStoryId(story.userStoryId);
       await reload();
+      router.push(`/projects/${projectId}/stories/${story.userStoryId}`);
     });
   }
 
-  async function createTask(event: FormEvent<HTMLFormElement>) {
+  async function createMcpKey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!taskStoryId || !taskTitle.trim()) {
-      setError("Selecciona una historia e ingresa el titulo de la tarea.");
+    if (!mcpDescription.trim()) {
+      setError("Ingresa una descripcion para la clave MCP.");
       return;
     }
-    await runMutation("Tarea creada.", async () => {
-      const detail = await apiRequest<TaskDetail>("/api/tasks", {
+    await runMutation("Clave MCP generada. Copiala ahora; no volvera a mostrarse.", async () => {
+      const key = await apiRequest<McpProjectKeyCreated>(`/api/projects/${projectId}/mcp-keys`, {
         method: "POST",
-        body: JSON.stringify({
-          userStoryId: taskStoryId,
-          title: taskTitle.trim(),
-          description: taskDescription.trim(),
-          assigneeIds: taskAssigneeIds,
-        }),
+        body: JSON.stringify({ description: mcpDescription.trim() }),
       });
-      setTaskTitle("");
-      setTaskDescription("");
-      setTaskAssigneeIds([]);
-      setSelectedTask(detail);
-      await reload();
+      setNewMcpKey(key);
+      setMcpKeys(await fetchMcpKeys(projectId));
     });
   }
 
-  async function openTask(taskId: string) {
-    await runMutation("", async () => {
-      const detail = await apiRequest<TaskDetail>(`/api/tasks/${taskId}`);
-      setSelectedTask(detail);
-      setCommentBody("");
+  async function deactivateMcpKey(keyId: string) {
+    await runMutation("Clave MCP desactivada.", async () => {
+      await apiRequest<void>(`/api/projects/${projectId}/mcp-keys/${keyId}`, {
+        method: "PATCH",
+      });
+      setMcpKeys(await fetchMcpKeys(projectId));
     });
   }
 
-  async function addComment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (selectedTask === null || !commentBody.trim()) return;
-    const taskId = selectedTask.sprintTaskId;
-    await runMutation("Comentario agregado.", async () => {
-      await apiRequest(`/api/tasks/${taskId}/comments`, {
-        method: "POST",
-        body: JSON.stringify({ body: commentBody.trim() }),
-      });
-      setCommentBody("");
-      const detail = await apiRequest<TaskDetail>(`/api/tasks/${taskId}`);
-      const projectTasks = await apiRequest<TaskSummary[]>(
-        `/api/tasks?projectId=${projectId}`,
-      );
-      setSelectedTask(detail);
-      setTasks(projectTasks);
+  function startDeleteKey(keyId: string, description: string) {
+    setDeleteTarget({
+      kind: "key",
+      name: description,
+      endpoint: `/api/projects/${projectId}/mcp-keys/${keyId}`,
     });
+  }
+
+  async function copyMcpPrompt(includeKey: boolean) {
+    const prompt = buildMcpPrompt({
+      projectName: project?.name ?? "este proyecto",
+      projectKey: includeKey ? newMcpKey?.rawKey : undefined,
+    });
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setNotice("Prompt MCP copiado.");
+      setError("");
+    } catch {
+      setError("No fue posible copiar el prompt automaticamente.");
+    }
   }
 
   async function confirmDelete(event: FormEvent<HTMLFormElement>) {
@@ -254,12 +248,6 @@ export default function ProjectDetailClient({
       if (deleteTarget.kind === "project") {
         router.replace("/projects");
         return;
-      }
-      if (
-        deleteTarget.kind === "task" &&
-        selectedTask?.title === deleteTarget.name
-      ) {
-        setSelectedTask(null);
       }
       setDeleteTarget(null);
       setConfirmationName("");
@@ -281,17 +269,7 @@ export default function ProjectDetailClient({
     }
   }
 
-  function toggleAssignee(userId: string) {
-    setTaskAssigneeIds((current) =>
-      current.includes(userId)
-        ? current.filter((id) => id !== userId)
-        : [...current, userId],
-    );
-  }
-
-  if (loading) {
-    return <LoadingBlock label="Cargando proyecto..." />;
-  }
+  if (loading) return <LoadingBlock label="Cargando proyecto..." />;
 
   if (project === null) {
     return (
@@ -307,7 +285,7 @@ export default function ProjectDetailClient({
       <PageHeader
         eyebrow="Proyecto"
         title={project.name}
-        description={project.description || "Sin descripcion."}
+        description={project.description || "Vista de historias de usuario del proyecto."}
         actions={
           <Button
             variant="danger"
@@ -345,7 +323,7 @@ export default function ProjectDetailClient({
         <Card className="p-5">
           <p className="text-sm text-[var(--muted)]">Tareas</p>
           <p className="mt-2 text-3xl font-semibold text-[var(--foreground)]">
-            {tasks.length}
+            {project.taskCount}
           </p>
         </Card>
       </section>
@@ -416,9 +394,6 @@ export default function ProjectDetailClient({
               </Select>
               <Button type="submit" disabled={busy}>Agregar</Button>
             </form>
-            <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
-              No existe endpoint de busqueda/listado de usuarios; por eso se agrega por UUID real.
-            </p>
           </Card>
 
           {memberDetail !== null && (
@@ -437,192 +412,98 @@ export default function ProjectDetailClient({
               </div>
             </Card>
           )}
+
+          <McpIntegrationCard
+            busy={busy}
+            keys={mcpKeys}
+            newKey={newMcpKey}
+            description={mcpDescription}
+            onDescriptionChange={setMcpDescription}
+            onCreate={createMcpKey}
+            onDeactivate={deactivateMcpKey}
+            onDelete={startDeleteKey}
+            onCopyPrompt={copyMcpPrompt}
+          />
         </div>
 
-        <div className="space-y-6">
-          <Card>
-            <h2 className="text-lg font-semibold text-[var(--foreground)]">Historias de usuario</h2>
-            <form onSubmit={createStory} className="mt-5 space-y-4">
-              <Field label="Nueva historia">
-                <TextInput
-                  value={storyTitle}
-                  onChange={(event) => setStoryTitle(event.target.value)}
-                  placeholder="Como usuario quiero..."
-                />
-              </Field>
-              <Field label="Descripcion">
-                <TextArea
-                  value={storyDescription}
-                  onChange={(event) => setStoryDescription(event.target.value)}
-                />
-              </Field>
-              <Button type="submit" disabled={busy}>Crear historia</Button>
-            </form>
+        <Card>
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">Historias de usuario</h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+            Selecciona una historia para abrir su tablero Kanban. Esta vista no muestra tareas directamente.
+          </p>
+          <form onSubmit={createStory} className="mt-5 space-y-4">
+            <Field label="Nueva historia">
+              <TextInput
+                value={storyTitle}
+                onChange={(event) => setStoryTitle(event.target.value)}
+                placeholder="Como usuario quiero..."
+              />
+            </Field>
+            <Field label="Descripcion">
+              <TextArea
+                value={storyDescription}
+                onChange={(event) => setStoryDescription(event.target.value)}
+              />
+            </Field>
+            <Button type="submit" disabled={busy}>Crear historia</Button>
+          </form>
 
-            <div className="mt-6 space-y-4">
-              {stories.length === 0 ? (
-                <EmptyState
-                  title="No hay historias"
-                  description="Crea la primera historia para poder registrar tareas."
-                />
-              ) : (
-                stories.map((story) => (
-                  <div key={story.userStoryId} className="rounded-xl border border-[var(--hairline)] bg-[var(--background)] p-4">
+          <div className="mt-6 space-y-4">
+            {stories.length === 0 ? (
+              <EmptyState
+                title="No hay historias"
+                description="Crea la primera historia para entrar luego a su tablero de tareas."
+              />
+            ) : (
+              stories.map((story) => (
+                <div key={story.userStoryId} className="overflow-hidden rounded-xl border border-[var(--hairline)] bg-[var(--background)]">
+                  <Link
+                    href={`/projects/${projectId}/stories/${story.userStoryId}`}
+                    className="block p-4 outline-none transition hover:bg-[var(--glass)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25"
+                  >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <h3 className="font-medium text-[var(--foreground)]">{story.title}</h3>
-                        <p className="mt-1 text-sm text-[var(--muted)]">{story.description || "Sin descripcion."}</p>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold leading-6 text-[var(--foreground)]">{story.title}</h3>
+                        <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{story.description || "Sin descripcion."}</p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        onClick={() =>
-                          setDeleteTarget({
-                            kind: "story",
-                            name: story.title,
-                            endpoint: `/api/user-stories/${story.userStoryId}`,
-                          })
-                        }
-                      >
-                        Eliminar
-                      </Button>
+                      <span className="rounded-full border border-[var(--hairline)] px-3 py-1 text-xs text-[var(--muted)]">
+                        Abrir tablero
+                      </span>
                     </div>
-                    <div className="mt-3">
+                    <div className="mt-4">
                       <ProgressBar value={story.progress} />
                       <p className="mt-2 text-xs text-[var(--muted)]">
-                        {Math.round(story.progress)}% · {tasks.filter((task) => task.userStoryId === story.userStoryId).length} tareas
+                        {Math.round(story.progress)}% de avance
                       </p>
                     </div>
+                  </Link>
+                  <div className="border-t border-[var(--hairline)] px-4 py-3">
+                    <Button
+                      variant="ghost"
+                      onClick={() =>
+                        setDeleteTarget({
+                          kind: "story",
+                          name: story.title,
+                          endpoint: `/api/user-stories/${story.userStoryId}`,
+                        })
+                      }
+                    >
+                      Eliminar
+                    </Button>
                   </div>
-                ))
-              )}
-            </div>
-          </Card>
-
-          <Card>
-            <h2 className="text-lg font-semibold text-[var(--foreground)]">Tareas</h2>
-            <form onSubmit={createTask} className="mt-5 space-y-4">
-              <Field label="Historia">
-                <Select value={taskStoryId} onChange={(event) => setTaskStoryId(event.target.value)}>
-                  <option value="">Selecciona una historia</option>
-                  {stories.map((story) => (
-                    <option key={story.userStoryId} value={story.userStoryId}>{story.title}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Titulo de tarea">
-                <TextInput value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} />
-              </Field>
-              <Field label="Descripcion">
-                <TextArea value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} />
-              </Field>
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">Asignados</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {project.members.map((member) => (
-                    <label key={member.userId} className="flex items-center gap-2 rounded-xl border border-[var(--hairline)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--muted)]">
-                      <input
-                        type="checkbox"
-                        checked={taskAssigneeIds.includes(member.userId)}
-                        onChange={() => toggleAssignee(member.userId)}
-                      />
-                      {member.fullName}
-                    </label>
-                  ))}
                 </div>
-              </div>
-              <Button type="submit" disabled={busy || stories.length === 0}>Crear tarea</Button>
-            </form>
-
-            <div className="mt-6 space-y-3">
-              {tasks.length === 0 ? (
-                <EmptyState title="No hay tareas" description="Crea tareas dentro de una historia para iniciar el seguimiento." />
-              ) : (
-                tasks.map((task) => (
-                  <div key={task.sprintTaskId} className="rounded-xl border border-[var(--hairline)] bg-[var(--background)] p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <h3 className="font-medium text-[var(--foreground)]">{task.title}</h3>
-                        <p className="mt-1 text-sm text-[var(--muted)]">{storyName(stories, task.userStoryId)}</p>
-                      </div>
-                      <Pill>{task.isCompleted ? "Completada" : "Pendiente"}</Pill>
-                    </div>
-                    <p className="mt-2 text-sm text-[var(--muted)]">{task.description || "Sin descripcion."}</p>
-                    <p className="mt-2 text-xs text-[var(--muted)]">
-                      {task.commentCount} comentarios · {task.assigneeIds.length} asignados
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button variant="secondary" onClick={() => openTask(task.sprintTaskId)} disabled={busy}>Ver comentarios</Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() =>
-                          setDeleteTarget({
-                            kind: "task",
-                            name: task.title,
-                            endpoint: `/api/tasks/${task.sprintTaskId}`,
-                          })
-                        }
-                      >
-                        Eliminar
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-
-          {selectedTask !== null && (
-            <Card>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-[var(--foreground)]">{selectedTask.title}</h2>
-                  <p className="mt-1 text-sm text-[var(--muted)]">{selectedTask.description || "Sin descripcion."}</p>
-                </div>
-                <Button variant="ghost" onClick={() => setSelectedTask(null)}>Cerrar</Button>
-              </div>
-              <div className="mt-4 space-y-3">
-                {selectedTask.comments.length === 0 ? (
-                  <EmptyState title="No hay comentarios" description="Agrega el primer comentario de seguimiento." />
-                ) : (
-                  selectedTask.comments.map((comment) => (
-                    <div key={comment.commentId} className="rounded-xl border border-[var(--hairline)] bg-[var(--background)] p-4">
-                      <p className="text-sm text-[var(--foreground)]">{comment.body}</p>
-                      <p className="mt-2 text-xs text-[var(--muted)]">
-                        {memberName(project, comment.authorId)} · {formatDate(comment.createdOnUtc)}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-              <form onSubmit={addComment} className="mt-5 flex flex-col gap-3 sm:flex-row">
-                <TextInput
-                  value={commentBody}
-                  onChange={(event) => setCommentBody(event.target.value)}
-                  placeholder="Escribe un comentario..."
-                />
-                <Button type="submit" disabled={busy || !commentBody.trim()}>Comentar</Button>
-              </form>
-            </Card>
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        </Card>
       </section>
-
-      <Card>
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">Gaps de API detectados</h2>
-        <div className="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
-          <p>No existe endpoint para editar historias de usuario; solo listar, crear, consultar detalle y eliminar.</p>
-          <p>No existe endpoint para actualizar estado o reasignar tareas; las asignaciones solo se definen al crear.</p>
-          <p>No existe endpoint para cambiar rol de miembro ni para buscar usuarios por correo.</p>
-          <p>No existe endpoint para editar o eliminar comentarios; los comentarios se agregan y se conservan segun la retencion del backend.</p>
-        </div>
-      </Card>
 
       {deleteTarget !== null && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 backdrop-blur-sm">
           <Card className="w-full max-w-md">
             <h2 className="text-xl font-semibold text-[var(--foreground)]">Eliminar {deleteLabel(deleteTarget.kind)}</h2>
             <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-              Escribe exactamente <span className="font-semibold text-[var(--foreground)]">{deleteTarget.name}</span> para confirmar. El backend rechazara la eliminacion si existen dependencias no permitidas.
+              Escribe exactamente <span className="font-semibold text-[var(--foreground)]">{deleteTarget.name}</span> para confirmar.
             </p>
             <form onSubmit={confirmDelete} className="mt-5 space-y-4">
               <TextInput value={confirmationName} onChange={(event) => setConfirmationName(event.target.value)} />
@@ -639,12 +520,264 @@ export default function ProjectDetailClient({
 }
 
 async function fetchProjectBundle(projectId: string): Promise<ProjectBundle> {
-  const [project, stories, tasks] = await Promise.all([
+  const [project, stories] = await Promise.all([
     apiRequest<ProjectDetail>(`/api/projects/${projectId}`),
     apiRequest<UserStorySummary[]>(`/api/projects/${projectId}/user-stories`),
-    apiRequest<TaskSummary[]>(`/api/tasks?projectId=${projectId}`),
   ]);
-  return { project, stories, tasks };
+  return { project, stories };
+}
+
+async function fetchMcpKeys(projectId: string): Promise<McpProjectKeySummary[]> {
+  return apiRequest<McpProjectKeySummary[]>(`/api/projects/${projectId}/mcp-keys`);
+}
+
+function McpIntegrationCard({
+  busy,
+  keys,
+  newKey,
+  description,
+  onDescriptionChange,
+  onCreate,
+  onDeactivate,
+  onDelete,
+  onCopyPrompt,
+}: {
+  readonly busy: boolean;
+  readonly keys: McpProjectKeySummary[];
+  readonly newKey: McpProjectKeyCreated | null;
+  readonly description: string;
+  readonly onDescriptionChange: (value: string) => void;
+  readonly onCreate: (event: FormEvent<HTMLFormElement>) => void;
+  readonly onDeactivate: (keyId: string) => void;
+  readonly onDelete: (keyId: string, description: string) => void;
+  readonly onCopyPrompt: (includeKey: boolean) => void;
+}) {
+  const origin = typeof window === "undefined" ? "https://tu-dominio" : window.location.origin;
+
+  return (
+    <Card>
+      <h2 className="text-lg font-semibold text-[var(--foreground)]">Integracion con IA (MCP)</h2>
+      <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+        Genera una PROJECT_KEY por proyecto para conectar agentes como OpenCode, Codex, Claude Code o Claude Desktop al backlog de este proyecto.
+      </p>
+
+      <form onSubmit={onCreate} className="mt-5 flex flex-col gap-3 sm:flex-row">
+        <TextInput
+          value={description}
+          onChange={(event) => onDescriptionChange(event.target.value)}
+          placeholder="Descripcion de la clave"
+        />
+        <Button type="submit" disabled={busy || !description.trim()}>
+          Generar PROJECT_KEY
+        </Button>
+      </form>
+
+      {newKey !== null && (
+        <div className="mt-5 space-y-4">
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+            <p className="text-sm font-semibold text-[var(--foreground)]">Clave generada. Copiala ahora.</p>
+            <code className="mt-3 block break-all rounded-lg border border-[var(--hairline)] bg-[var(--background)] p-3 text-xs text-[var(--foreground)]">
+              {newKey.rawKey}
+            </code>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => copyText(newKey.rawKey)}>
+                Copiar clave
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => onCopyPrompt(true)}>
+                Copiar prompt con clave
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => onCopyPrompt(false)}>
+                Copiar prompt seguro
+              </Button>
+            </div>
+          </div>
+
+          <details className="group">
+            <summary className="cursor-pointer text-sm font-medium text-[var(--foreground)] hover:opacity-80">
+              Configuraciones listas para copiar
+            </summary>
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-[var(--muted)] mb-1">OpenCode (opencode.json)</p>
+                <pre className="overflow-x-auto rounded-lg border border-[var(--hairline)] bg-[var(--background)] p-3 text-[11px] leading-5 text-[var(--foreground)]">
+                  {buildOpenCodeConfig(origin)}
+                </pre>
+                <Button type="button" variant="secondary" className="mt-2" onClick={() => copyText(buildOpenCodeConfig(origin))}>
+                  Copiar config OpenCode
+                </Button>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-[var(--muted)] mb-1">Codex (.config.toml)</p>
+                <p className="text-[10px] text-[var(--muted)] mb-1">Configura <code className="text-[var(--foreground)]">SPRINTROOM_PROJECT_KEY</code> como variable de entorno en tu perfil.</p>
+                <pre className="overflow-x-auto rounded-lg border border-[var(--hairline)] bg-[var(--background)] p-3 text-[11px] leading-5 text-[var(--foreground)]">
+                  {buildCodexConfigEnv(origin)}
+                </pre>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" onClick={() => copyText(buildCodexConfigEnv(origin))}>
+                    Copiar (env-var)
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => copyText(buildCodexConfigRaw(origin, newKey.rawKey))}>
+                    Copiar con clave directa
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-[var(--muted)] mb-1">Claude Code</p>
+                <p className="text-[10px] text-[var(--muted)] mb-1">Asegurate de tener <code className="text-[var(--foreground)]">SPRINTROOM_PROJECT_KEY</code> en tu sesion.</p>
+                <pre className="overflow-x-auto rounded-lg border border-[var(--hairline)] bg-[var(--background)] p-3 text-[11px] leading-5 text-[var(--foreground)]">
+                  {buildClaudeCodeCommandEnv(origin)}
+                </pre>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" onClick={() => copyText(buildClaudeCodeCommandEnv(origin))}>
+                    Copiar comando (env-var)
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => copyText(buildClaudeCodeCommandRaw(origin, newKey.rawKey))}>
+                    Copiar con clave directa
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-[var(--muted)] mb-1">Claude Desktop (claude_desktop_config.json)</p>
+                <p className="text-[10px] text-[var(--muted)] mb-1">Referencia <code className="text-[var(--foreground)]">{'${SPRINTROOM_PROJECT_KEY}'}</code> en el JSON. Claude Desktop la lee del entorno al iniciar.</p>
+                <pre className="overflow-x-auto rounded-lg border border-[var(--hairline)] bg-[var(--background)] p-3 text-[11px] leading-5 text-[var(--foreground)]">
+                  {buildClaudeDesktopConfigEnv(origin)}
+                </pre>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" onClick={() => copyText(buildClaudeDesktopConfigEnv(origin))}>
+                    Copiar (env-var)
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => copyText(buildClaudeDesktopConfigRaw(origin, newKey.rawKey))}>
+                    Copiar con clave directa
+                  </Button>
+                </div>
+              </div>
+
+              <p className="text-xs text-[var(--muted)]">
+                <strong>Advertencia de seguridad:</strong> Nunca compartas la PROJECT_KEY en chats, commits o documentacion.
+                Si sospechas que fue comprometida, desactivala y genera una nueva desde esta seccion.
+              </p>
+            </div>
+          </details>
+        </div>
+      )}
+
+      <div className="mt-5 space-y-3">
+        {keys.length === 0 ? (
+          <EmptyState title="No hay claves MCP" description="Genera una clave para conectar un agente IA a este proyecto." />
+        ) : (
+          keys.map((key) => (
+            <div key={key.id} className="rounded-xl border border-[var(--hairline)] bg-[var(--background)] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="font-medium text-[var(--foreground)]">{key.description}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">Creada {formatDate(key.createdOnUtc)}</p>
+                </div>
+                <Pill className={key.isActive ? "" : "opacity-60"}>
+                  {key.isActive ? "Activa" : "Inactiva"}
+                </Pill>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {key.isActive && (
+                  <Button type="button" variant="ghost" onClick={() => onDeactivate(key.id)} disabled={busy}>
+                    Desactivar
+                  </Button>
+                )}
+                <Button type="button" variant="danger" onClick={() => onDelete(key.id, key.description)} disabled={busy}>
+                  Eliminar
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function buildOpenCodeConfig(origin: string): string {
+  return `{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "sprintroom": {
+      "type": "local",
+      "command": ["npx", "-y", "@sprintroom/mcp"],
+      "enabled": true,
+      "environment": {
+        "SPRINTROOM_API_URL": "${origin}",
+        "SPRINTROOM_PROJECT_KEY": "{env:SPRINTROOM_PROJECT_KEY}"
+      }
+    }
+  }
+}`;
+}
+
+function buildCodexConfigEnv(origin: string): string {
+  return `[mcp_servers.sprintroom]
+command = "npx"
+args = ["-y", "@sprintroom/mcp"]
+
+[mcp_servers.sprintroom.env]
+SPRINTROOM_API_URL = "${origin}"
+SPRINTROOM_PROJECT_KEY = "\${env:SPRINTROOM_PROJECT_KEY}"`;
+}
+
+function buildCodexConfigRaw(origin: string, rawKey: string): string {
+  return `[mcp_servers.sprintroom]
+command = "npx"
+args = ["-y", "@sprintroom/mcp"]
+
+[mcp_servers.sprintroom.env]
+SPRINTROOM_API_URL = "${origin}"
+SPRINTROOM_PROJECT_KEY = "${rawKey}"`;
+}
+
+function buildClaudeCodeCommandEnv(origin: string): string {
+  return `claude mcp add --transport stdio \\
+  --env SPRINTROOM_API_URL=${origin} \\
+  --env SPRINTROOM_PROJECT_KEY=$SPRINTROOM_PROJECT_KEY \\
+  sprintroom \\
+  -- npx -y @sprintroom/mcp`;
+}
+
+function buildClaudeCodeCommandRaw(origin: string, rawKey: string): string {
+  return `claude mcp add --transport stdio \\
+  --env SPRINTROOM_API_URL=${origin} \\
+  --env SPRINTROOM_PROJECT_KEY=${rawKey} \\
+  sprintroom \\
+  -- npx -y @sprintroom/mcp`;
+}
+
+function buildClaudeDesktopConfigEnv(origin: string): string {
+  return `{
+  "mcpServers": {
+    "sprintroom": {
+      "command": "npx",
+      "args": ["-y", "@sprintroom/mcp"],
+      "env": {
+        "SPRINTROOM_API_URL": "${origin}",
+        "SPRINTROOM_PROJECT_KEY": "\${SPRINTROOM_PROJECT_KEY}"
+      }
+    }
+  }
+}`;
+}
+
+function buildClaudeDesktopConfigRaw(origin: string, rawKey: string): string {
+  return `{
+  "mcpServers": {
+    "sprintroom": {
+      "command": "npx",
+      "args": ["-y", "@sprintroom/mcp"],
+      "env": {
+        "SPRINTROOM_API_URL": "${origin}",
+        "SPRINTROOM_PROJECT_KEY": "${rawKey}"
+      }
+    }
+  }
+}`;
 }
 
 function MiniMetric({ label, value }: { readonly label: string; readonly value: number }) {
@@ -656,18 +789,10 @@ function MiniMetric({ label, value }: { readonly label: string; readonly value: 
   );
 }
 
-function memberName(project: ProjectDetail, userId: string): string {
-  return project.members.find((member) => member.userId === userId)?.fullName ?? userId;
-}
-
-function storyName(stories: UserStorySummary[], userStoryId: string): string {
-  return stories.find((story) => story.userStoryId === userStoryId)?.title ?? "Historia no disponible";
-}
-
 function deleteLabel(kind: DeleteTarget["kind"]): string {
   if (kind === "project") return "proyecto";
   if (kind === "story") return "historia";
-  return "tarea";
+  return "clave MCP";
 }
 
 function formatDate(value: string): string {
@@ -677,4 +802,58 @@ function formatDate(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function buildMcpPrompt({
+  projectName,
+  projectKey,
+}: {
+  readonly projectName: string;
+  readonly projectKey?: string;
+}): string {
+  const origin = typeof window === "undefined" ? "https://tu-dominio" : window.location.origin;
+  const keyLine = projectKey === undefined
+    ? "PROJECT_KEY=<pega-aqui-la-project-key-del-proyecto>"
+    : `PROJECT_KEY=${projectKey}`;
+
+  return `You are working on SprintRoom for project "${projectName}".
+
+Configure the MCP:
+
+Endpoint: ${origin}/api/mcp
+Header: X-Project-Key
+${keyLine}
+
+The MCP supports simple HTTP and JSON-RPC 2.0.
+
+First, call get_sprintroom_mcp_skill:
+
+HTTP: {"tool":"get_sprintroom_mcp_skill"}
+JSON-RPC: tools/call name="get_sprintroom_mcp_skill"
+
+Use the response as the source of truth. Create or update:
+
+.sprintroom/sprintroom-mcp/README.md
+.sprintroom/sprintroom-mcp/SKILL.md
+
+If the repo already uses .agents/ or .skills/, install sprintroom-mcp there instead.
+
+Create or update AGENTS.md or AGENTES.md with this rule:
+
+“Before using SprintRoom MCP, every agent must read the sprintroom-mcp skill. The skill is the source of truth for tools, parameters, outputs, errors, and best practices. Do not invent tools, arguments, endpoints, states, commands, or behavior. If the MCP changes, update the skill in the same change.”
+
+Rules:
+Use SKILL.md as the source of truth.
+Do not invent tools, parameters, states, commands, endpoints, or behavior.
+SprintRoom has no CLI, so do not create CLI instructions.
+Follow the project’s existing structure.
+
+Finish by confirming:
+MCP configured.
+Skill installed.
+AGENTS.md or AGENTES.md updated.`;
+}
+
+async function copyText(value: string) {
+  await navigator.clipboard.writeText(value);
 }
