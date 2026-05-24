@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline";
+// TODO: Refactor tools/list to fetch definitions from SprintRoom API (/api/mcp)
+// instead of bundling them in definitions.ts. This will eliminate the need to
+// manually sync definitions and bump the package version on every tool change.
 import { MCP_TOOL_DEFINITIONS } from "./definitions.js";
 const SERVER_NAME = "sprintroom-mcp";
-const SERVER_VERSION = "1.0.0";
+const SERVER_VERSION = "1.0.1";
 const PROTOCOL_VERSION = "0.1.0";
 function getEnv(name) {
     return (process.env[name] ?? "").trim();

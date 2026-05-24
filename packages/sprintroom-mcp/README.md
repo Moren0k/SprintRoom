@@ -29,14 +29,36 @@ Requiere dos variables de entorno:
 
 ## Seguridad
 
-- `PROJECT_KEY` otorga acceso completo de lectura/escritura a un proyecto.
+- `SPRINTROOM_PROJECT_KEY` otorga acceso completo de lectura/escritura a un proyecto.
 - No compartas la clave en chats, commits ni documentacion publica.
 - Revocala desde la UI del proyecto si fue comprometida.
-- Las credenciales de InsForge (`INSFORGE_URL`, `INSFORGE_ANON_KEY`, `INSFORGE_API_KEY`) son secretos del backend. No las exposes a usuarios externos.
+- Estas credenciales son todo lo que necesitas. No requieres variables de InsForge.
 
-## Versionado
+## How to update the MCP
 
-Las definiciones de herramientas se incrustan en el paquete (`src/definitions.ts`). Cuando se agrega, modifica o elimina una herramienta en el backend, la version del paquete debe incrementarse siguiendo semver.
+Las definiciones de herramientas estan incrustadas en `src/definitions.ts` (codigo fuente) y compiladas a `dist/definitions.js`. Si el backend agrega, modifica o elimina herramientas, la version del paquete debe incrementarse siguiendo semver:
+
+| Cambio | Version | Ejemplo |
+|--------|---------|---------|
+| Bugfix o documentacion | PATCH | `1.0.0 → 1.0.1` |
+| Nueva herramienta o parametro opcional | MINOR | `1.0.0 → 1.1.0` |
+| Breaking change en herramienta existente | MAJOR | `1.0.0 → 2.0.0` |
+
+**Pasos para publicar:**
+```bash
+cd packages/sprintroom-mcp
+# 1. Actualizar src/definitions.ts con los cambios del backend
+# 2. Incrementar version en package.json
+# 3. Compilar
+npm run build
+# 4. Verificar
+npm publish --dry-run
+# 5. Probar desde directorio limpio
+# 6. Publicar
+npm publish --access public
+```
+
+**Limitacion:** `tools/list` responde con definiciones incrustadas, no consulta la API de SprintRoom. Si las herramientas del backend cambian sin actualizar el paquete, los clientes veran definiciones desactualizadas. **TODO:** Refactorizar para que `tools/list` se obtenga desde `/api/mcp` y eliminar la duplicacion de definiciones.
 
 ## Licencia
 
