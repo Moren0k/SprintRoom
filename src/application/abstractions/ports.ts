@@ -43,9 +43,59 @@ export interface SprintTaskRepository {
   delete(sprintTask: SprintTask): Promise<void>;
 }
 
+export interface TaskAgentNoteRepository {
+  add(note: Readonly<{
+    id: string;
+    projectId: string;
+    taskId: string;
+    content: string;
+    createdOnUtc: string;
+  }>): Promise<void>;
+  listByTask(taskId: string, projectId: string): Promise<ReadonlyArray<{
+    id: string;
+    projectId: string;
+    taskId: string;
+    content: string;
+    createdOnUtc: string;
+  }>>;
+}
+
+export interface ProjectKeyRecord {
+  readonly id: string;
+  readonly projectId: string;
+  readonly keyHash: string;
+  readonly description: string;
+  readonly isActive: boolean;
+  readonly createdOnUtc: string;
+}
+
+export interface ProjectKeyRepository {
+  listByProject(projectId: string): Promise<ReadonlyArray<ProjectKeyRecord>>;
+  getByIdAndProject(id: string, projectId: string): Promise<ProjectKeyRecord | null>;
+  add(record: ProjectKeyRecord): Promise<void>;
+  deactivate(id: string): Promise<void>;
+  delete(id: string): Promise<void>;
+}
+
+export interface KeyHasher {
+  hash(key: string): string;
+}
+
 export interface PasswordHasher {
   hash(plainTextPassword: string): string;
   verify(plainTextPassword: string, passwordHash: string): boolean;
+}
+
+export interface AuditEventRecord {
+  readonly id: string;
+  readonly action: string;
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly occurredOnUtc: string;
+}
+
+export interface AuditEventRepository {
+  listRecentByProject(projectId: string, limit: number): Promise<ReadonlyArray<AuditEventRecord>>;
 }
 
 export interface UnitOfWork {

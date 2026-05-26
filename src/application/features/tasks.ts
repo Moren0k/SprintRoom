@@ -20,6 +20,7 @@ import type {
   Clock,
   ProjectRepository,
   SprintTaskRepository,
+  TaskAgentNoteRepository,
   UnitOfWork,
   UserRepository,
   UserStoryRepository,
@@ -367,6 +368,148 @@ export class AddTaskCommentHandler
       authorId: comment.authorId,
       body: comment.body.value,
       createdOnUtc: comment.createdOnUtc,
+    };
+  }
+}
+
+/* ===================== MCP: Detalle de tarea ======================== */
+
+export interface McpGetSprintTaskDetailQuery {
+  readonly projectId: string;
+  readonly sprintTaskId: string;
+}
+
+export class McpGetSprintTaskDetailHandler
+  implements QueryHandler<McpGetSprintTaskDetailQuery, TaskDetailDto>
+{
+  constructor(
+    private readonly sprintTaskRepository: SprintTaskRepository,
+  ) {}
+
+  async handle(query: McpGetSprintTaskDetailQuery): Promise<TaskDetailDto> {
+    const task = await this.sprintTaskRepository.getById(
+      SprintTaskId.from(query.sprintTaskId),
+    );
+    if (task === null) {
+      throw new ApplicationError("La tarea no existe.");
+    }
+    if (task.projectId !== query.projectId) {
+      throw new ApplicationError("La tarea no pertenece a este proyecto.");
+    }
+    return TaskMappings.toDetailDto(task);
+  }
+}
+
+/* ===================== MCP: Cambiar estado de tarea =================== */
+
+export interface McpUpdateTaskStatusCommand {
+  readonly projectId: string;
+  readonly sprintTaskId: string;
+  readonly status: string;
+}
+
+export interface McpUpdateTaskStatusResult {
+  readonly taskDetail: TaskDetailDto;
+  readonly previousStatus: string;
+}
+
+export class McpUpdateTaskStatusHandler
+  implements CommandHandler<McpUpdateTaskStatusCommand, McpUpdateTaskStatusResult>
+{
+  constructor(
+    private readonly sprintTaskRepository: SprintTaskRepository,
+    private readonly unitOfWork: UnitOfWork,
+    private readonly clock: Clock,
+  ) {}
+
+  async handle(command: McpUpdateTaskStatusCommand): Promise<McpUpdateTaskStatusResult> {
+    const { status } = command;
+    if (!Object.values(TaskStatus).includes(status as TaskStatus)) {
+      throw new ApplicationError(`Estado de tarea invalido: ${status}.`);
+    }
+
+    const task = await this.sprintTaskRepository.getById(
+      SprintTaskId.from(command.sprintTaskId),
+    );
+    if (task === null) {
+      throw new ApplicationError("La tarea no existe.");
+    }
+    if (task.projectId !== command.projectId) {
+      throw new ApplicationError("La tarea no pertenece a este proyecto.");
+    }
+
+    const previousStatus = task.status;
+    task.updateStatus(status as TaskStatus, this.clock.utcNow);
+    await this.unitOfWork.saveChanges();
+
+    return {
+      taskDetail: TaskMappings.toDetailDto(task),
+      previousStatus,
+    };
+  }
+}
+
+/* ===================== MCP: Agregar nota de agente ==================== */
+
+export interface AddTaskAgentNoteCommand {
+  readonly projectId: string;
+  readonly taskId: string;
+  readonly content: string;
+}
+
+export interface AddTaskAgentNoteResult {
+  readonly noteId: string;
+  readonly taskId: string;
+  readonly content: string;
+  readonly createdOnUtc: string;
+}
+
+export class AddTaskAgentNoteHandler
+  implements CommandHandler<AddTaskAgentNoteCommand, AddTaskAgentNoteResult>
+{
+  private static readonly MAX_CONTENT_LENGTH = 10000;
+
+  constructor(
+    private readonly sprintTaskRepository: SprintTaskRepository,
+    private readonly taskAgentNoteRepository: TaskAgentNoteRepository,
+  ) {}
+
+  async handle(command: AddTaskAgentNoteCommand): Promise<AddTaskAgentNoteResult> {
+    if (command.content.trim().length === 0) {
+      throw new ApplicationError("El contenido de la nota no puede estar vacio.");
+    }
+    if (command.content.length > AddTaskAgentNoteHandler.MAX_CONTENT_LENGTH) {
+      throw new ApplicationError(
+        `El contenido de la nota no puede exceder los ${AddTaskAgentNoteHandler.MAX_CONTENT_LENGTH} caracteres.`,
+      );
+    }
+
+    const task = await this.sprintTaskRepository.getById(
+      SprintTaskId.from(command.taskId),
+    );
+    if (task === null) {
+      throw new ApplicationError("La tarea no existe.");
+    }
+    if (task.projectId !== command.projectId) {
+      throw new ApplicationError("La tarea no pertenece a este proyecto.");
+    }
+
+    const noteId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await this.taskAgentNoteRepository.add({
+      id: noteId,
+      projectId: command.projectId,
+      taskId: command.taskId,
+      content: command.content,
+      createdOnUtc: now,
+    });
+
+    return {
+      noteId,
+      taskId: command.taskId,
+      content: command.content,
+      createdOnUtc: now,
     };
   }
 }

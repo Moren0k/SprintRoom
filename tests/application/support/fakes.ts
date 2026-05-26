@@ -1,8 +1,14 @@
 import type {
+  AuditEventRecord,
+  AuditEventRepository,
   Clock,
+  KeyHasher,
   PasswordHasher,
+  ProjectKeyRecord,
+  ProjectKeyRepository,
   ProjectRepository,
   SprintTaskRepository,
+  TaskAgentNoteRepository,
   UnitOfWork,
   UserRepository,
   UserStoryRepository,
@@ -108,6 +114,80 @@ export class InMemorySprintTaskRepository implements SprintTaskRepository {
   }
 }
 
+export class InMemoryTaskAgentNoteRepository implements TaskAgentNoteRepository {
+  readonly notes: Array<{
+    id: string;
+    projectId: string;
+    taskId: string;
+    content: string;
+    createdOnUtc: string;
+  }> = [];
+
+  async add(note: Readonly<{
+    id: string;
+    projectId: string;
+    taskId: string;
+    content: string;
+    createdOnUtc: string;
+  }>): Promise<void> {
+    this.notes.push({ ...note });
+  }
+
+  async listByTask(taskId: string, projectId: string): Promise<ReadonlyArray<{
+    id: string;
+    projectId: string;
+    taskId: string;
+    content: string;
+    createdOnUtc: string;
+  }>> {
+    return this.notes
+      .filter((n) => n.taskId === taskId && n.projectId === projectId)
+      .map((n) => ({ ...n }));
+  }
+}
+
+interface MutableProjectKeyRecord {
+  id: string;
+  projectId: string;
+  keyHash: string;
+  description: string;
+  isActive: boolean;
+  createdOnUtc: string;
+}
+
+export class InMemoryProjectKeyRepository implements ProjectKeyRepository {
+  readonly keys: MutableProjectKeyRecord[] = [];
+
+  async listByProject(projectId: string): Promise<ReadonlyArray<ProjectKeyRecord>> {
+    return this.keys.filter(k => k.projectId === projectId).map(k => ({ ...k }));
+  }
+
+  async getByIdAndProject(id: string, projectId: string): Promise<ProjectKeyRecord | null> {
+    const key = this.keys.find(k => k.id === id && k.projectId === projectId);
+    return key ? { ...key } : null;
+  }
+
+  async add(record: ProjectKeyRecord): Promise<void> {
+    this.keys.push({ ...record });
+  }
+
+  async deactivate(id: string): Promise<void> {
+    const key = this.keys.find(k => k.id === id);
+    if (key) key.isActive = false;
+  }
+
+  async delete(id: string): Promise<void> {
+    const idx = this.keys.findIndex(k => k.id === id);
+    if (idx !== -1) this.keys.splice(idx, 1);
+  }
+}
+
+export class FakeKeyHasher implements KeyHasher {
+  hash(key: string): string {
+    return `hash::${key}`;
+  }
+}
+
 export class FakePasswordHasher implements PasswordHasher {
   hash(plainTextPassword: string): string {
     return `hash::${plainTextPassword}`;
@@ -121,6 +201,18 @@ export class FakeUnitOfWork implements UnitOfWork {
   saveChangesCalls = 0;
   async saveChanges(): Promise<void> {
     this.saveChangesCalls++;
+  }
+}
+
+export class InMemoryAuditEventRepository implements AuditEventRepository {
+  readonly events: AuditEventRecord[] = [];
+
+  async listRecentByProject(projectId: string, limit: number): Promise<ReadonlyArray<AuditEventRecord>> {
+    return this.events
+      .slice()
+      .reverse()
+      .slice(0, limit)
+      .map((e) => ({ ...e }));
   }
 }
 

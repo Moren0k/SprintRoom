@@ -1,6 +1,6 @@
 ---
 name: sprintroom-mcp
-description: Use when an AI agent needs to use the SprintRoom MCP to install/update the official skill, read backlog, inspect user stories or tasks, search tasks, update task status, or add task agent notes.
+description: Use when an AI agent needs to use the SprintRoom MCP to install/update the official skill, read backlog, inspect user stories or tasks, search tasks, create user stories/tasks/comments, assign tasks, update task status/details, or add task agent notes.
 ---
 
 # sprintroom-mcp
@@ -11,7 +11,7 @@ Esta skill es la guia oficial para agentes de IA que usan el MCP de SprintRoom. 
 
 ## Que es el MCP de SprintRoom
 
-El MCP de SprintRoom es el endpoint `/api/mcp` de SprintRoom. Permite a agentes de IA consultar el backlog real de un proyecto, instalar/actualizar esta skill oficial y ejecutar dos acciones de escritura: actualizar estado de tareas y registrar notas de agente.
+El MCP de SprintRoom es el endpoint `/api/mcp` de SprintRoom. Permite a agentes de IA consultar el backlog real de un proyecto, instalar/actualizar esta skill oficial y ejecutar acciones de escritura: crear historias de usuario, crear tareas, asignar/reasignar tareas, crear comentarios, actualizar estado y detalles de tareas, y registrar notas de agente.
 
 El proyecto se resuelve desde una PROJECT_KEY enviada en el header `X-Project-Key`. Todas las consultas y escrituras quedan filtradas al `projectId` asociado a esa key.
 
@@ -34,6 +34,11 @@ La herramienta `get_sprintroom_mcp_skill` no escribe archivos. Solo devuelve el 
 - Para entender el backlog real de un proyecto SprintRoom.
 - Para consultar historias de usuario y tareas.
 - Para buscar tareas por texto, estado o historia.
+- Para obtener detalle completo de un proyecto (progreso, miembros, conteos).
+- Para listar miembros de un proyecto.
+- Para leer comentarios de una tarea.
+- Para leer notas de agente de una tarea.
+- Para consultar actividad reciente de un proyecto.
 - Para mover una tarea entre estados Kanban cuando hay instruccion o evidencia suficiente.
 - Para registrar una nota tecnica del agente en una tarea.
 
@@ -41,7 +46,12 @@ La herramienta `get_sprintroom_mcp_skill` no escribe archivos. Solo devuelve el 
 
 - Si no necesitas datos reales de SprintRoom ni instalar esta skill.
 - Si falta PROJECT_KEY.
-- Para crear, editar o eliminar proyectos, historias, tareas, comentarios, miembros o claves MCP.
+- Para crear o eliminar proyectos.
+- Para editar o eliminar historias de usuario.
+- Para eliminar tareas.
+- Para editar o eliminar comentarios.
+- Para gestionar miembros (anadir, eliminar, cambiar rol).
+- Para crear, listar o revocar PROJECT_KEYs.
 - Para gestionar permisos, base de datos, migraciones, OAuth, hosting o configuracion de SprintRoom.
 - Para guardar secretos o credenciales en notas de agente.
 
@@ -77,23 +87,29 @@ No uses `todo`, `done` ni `blocked`; no existen como estados validos en el MCP a
 - `get_user_story_by_id`
 - `get_task_by_id`
 - `search_tasks`
+- `get_project_detail`
+- `list_project_members`
+- `list_task_comments`
+- `list_task_agent_notes`
+- `get_project_activity`
 - `update_task_status`
 - `add_task_agent_note`
 - `get_sprintroom_mcp_skill`
+- `create_task_comment`
+- `create_task`
+- `create_user_story`
+- `update_task_details`
+- `assign_task`
 
 ## Capacidades no disponibles actualmente en el MCP
 
 No disponible actualmente en el MCP:
 
-- Crear, editar o eliminar proyectos.
-- Crear, editar o eliminar historias de usuario.
-- Crear tareas.
-- Editar titulo o descripcion de tareas.
-- Eliminar tareas.
-- Reasignar tareas.
-- Leer comentarios completos de tareas.
-- Crear comentarios normales de usuario.
-- Gestionar miembros.
+- Crear proyectos.
+- Editar o eliminar historias de usuario.
+- Editar o eliminar tareas.
+- Editar o eliminar comentarios.
+- Gestionar miembros (anadir, eliminar, cambiar rol).
 - Crear, listar o revocar PROJECT_KEYs desde el MCP.
 - Modificar permisos, RLS, migraciones, base de datos u OAuth.
 
@@ -106,6 +122,16 @@ Si el usuario pide una capacidad no disponible, dilo claramente y no inventes un
 - Tienes `userStoryId` y necesitas una historia: usa `get_user_story_by_id`.
 - Tienes `taskId` y necesitas contexto de tarea: usa `get_task_by_id`.
 - Tienes texto, estado o `storyId` para encontrar tareas: usa `search_tasks`.
+- Necesitas detalle completo del proyecto (progreso, miembros, conteos): usa `get_project_detail`.
+- Necesitas ver quienes son miembros del proyecto: usa `list_project_members`.
+- Tienes `taskId` y necesitas sus comentarios: usa `list_task_comments`.
+- Tienes `taskId` y necesitas sus notas de agente: usa `list_task_agent_notes`.
+- Necesitas auditoria o actividad reciente del proyecto: usa `get_project_activity`.
+- Necesitas crear una historia de usuario: usa `create_user_story`.
+- Necesitas crear una tarea en una historia existente: usa `create_task`.
+- Necesitas agregar un comentario a una tarea: usa `create_task_comment`.
+- Necesitas cambiar titulo o descripcion de una tarea: usa `update_task_details`.
+- Necesitas reemplazar los usuarios asignados a una tarea: usa `assign_task`.
 - Necesitas mover una tarea a otro estado: valida primero y usa `update_task_status`.
 - Terminaste trabajo o debes dejar trazabilidad tecnica: usa `add_task_agent_note`.
 
@@ -166,6 +192,56 @@ Entrada HTTP simple:
 
     { "tool": "search_tasks", "query": "login", "status": "not_started", "storyId": "uuid" }
 
+## Herramienta: get_project_detail
+
+Obtiene detalle completo de un proyecto: informacion basica, conteo de historias y tareas, progreso (porcentaje completado), y miembros con sus roles.
+
+Entrada HTTP simple:
+
+    { "tool": "get_project_detail" }
+
+Salida: `id`, `name`, `description`, `ownerId`, `storyCount`, `taskCount`, `completedTaskCount`, `progressPercent`, `members[]` con `userId`, `role`.
+
+## Herramienta: list_project_members
+
+Lista los miembros de un proyecto con su rol y nombre.
+
+Entrada HTTP simple:
+
+    { "tool": "list_project_members" }
+
+Salida: `members[]` con `userId`, `fullName`, `email`, `role`.
+
+## Herramienta: list_task_comments
+
+Lista los comentarios de una tarea con autor y fecha.
+
+Entrada HTTP simple:
+
+    { "tool": "list_task_comments", "taskId": "uuid" }
+
+Salida: `comments[]` con `id`, `taskId`, `authorId`, `authorName`, `body`, `createdOnUtc`.
+
+## Herramienta: list_task_agent_notes
+
+Lista las notas de agente de una tarea.
+
+Entrada HTTP simple:
+
+    { "tool": "list_task_agent_notes", "taskId": "uuid" }
+
+Salida: `notes[]` con `id`, `taskId`, `content`, `createdOnUtc`.
+
+## Herramienta: get_project_activity
+
+Obtiene los eventos de actividad reciente de un proyecto (auditoria). Por defecto devuelve los ultimos 20 eventos, maximo 50.
+
+Entrada HTTP simple:
+
+    { "tool": "get_project_activity", "limit": 20 }
+
+Salida: `events[]` con `id`, `action`, `entityType`, `entityId`, `occurredOnUtc`.
+
 ## Herramienta: update_task_status
 
 Actualiza el estado de una tarea. Tambien sincroniza `is_completed` a true solo cuando `status` es `completed`.
@@ -185,6 +261,66 @@ Entrada HTTP simple:
     { "tool": "add_task_agent_note", "taskId": "uuid", "content": "Archivos: ...\nDecisiones: ...\nBloqueos: ..." }
 
 Nunca incluyas secretos, tokens o PROJECT_KEY en `content`.
+
+## Herramienta: create_task_comment
+
+Agrega un comentario a una tarea existente. El autor del comentario se asigna automaticamente como el propietario del proyecto.
+
+Entrada HTTP simple:
+
+    { "tool": "create_task_comment", "taskId": "uuid", "body": "Texto del comentario" }`,
+
+`body` tiene un maximo de 2000 caracteres.
+
+Salida: `id`, `taskId`, `body`, `createdOnUtc`.
+
+## Herramienta: create_task
+
+Crea una nueva tarea dentro de una historia de usuario existente. Opcionalmente asigna usuarios del proyecto.
+
+Entrada HTTP simple:
+
+    { "tool": "create_task", "userStoryId": "uuid", "title": "Titulo", "description": "Descripcion opcional", "assigneeIds": ["uuid1", "uuid2"] }
+
+`title` tiene maximo 160 caracteres, `description` tiene maximo 2000 caracteres. Los `assigneeIds` deben existir y ser miembros del proyecto.
+
+Salida: `taskId`, `userStoryId`, `title`, `description`, `status`, `assigneeIds[]`.
+
+## Herramienta: create_user_story
+
+Crea una nueva historia de usuario en el proyecto actual.
+
+Entrada HTTP simple:
+
+    { "tool": "create_user_story", "title": "Titulo", "description": "Descripcion opcional" }
+
+`title` tiene maximo 160 caracteres, `description` tiene maximo 2000 caracteres.
+
+Salida: `id`, `title`, `description`, `createdOnUtc`.
+
+## Herramienta: update_task_details
+
+Actualiza el titulo y/o descripcion de una tarea existente. Solo se actualizan los campos proporcionados.
+
+Entrada HTTP simple:
+
+    { "tool": "update_task_details", "taskId": "uuid", "title": "Nuevo titulo", "description": "Nueva descripcion" }
+
+Al menos uno de `title` o `description` debe estar presente. `title` tiene maximo 160 caracteres, `description` tiene maximo 2000.
+
+Salida: `taskId`, `title`, `description`, `status`, `assigneeIds[]`.
+
+## Herramienta: assign_task
+
+Reemplaza los usuarios asignados a una tarea. Los usuarios deben existir y pertenecer al proyecto.
+
+Entrada HTTP simple:
+
+    { "tool": "assign_task", "taskId": "uuid", "assigneeIds": ["uuid1", "uuid2"] }
+
+Usa un enfoque basado en diferencias: remueve asignaciones previas que no estan en la nueva lista, agrega las nuevas. Pasa un arreglo vacio para desasignar a todos.
+
+Salida: `taskId`, `assigneeIds[]`, `status`.
 
 ## Errores comunes
 
@@ -210,6 +346,17 @@ Instalar o actualizar la skill:
 4. Actualiza AGENTS.md o AGENTES.md.
 5. Lee la skill instalada antes de seguir.
 
+Explorar un proyecto:
+1. `get_project_detail` para resumen del proyecto (progreso, miembros, conteos).
+2. `get_project_backlog` para backlog detallado.
+3. `list_project_members` para ver miembros y sus roles.
+4. `get_project_activity` para actividad reciente.
+
+Inspeccionar una tarea:
+1. `get_task_by_id` para contexto completo.
+2. `list_task_comments` para leer comentarios.
+3. `list_task_agent_notes` para leer notas de agente previas.
+
 Tomar una tarea:
 1. `get_project_backlog` o `search_tasks`.
 2. `get_task_by_id` para validar contexto.
@@ -217,6 +364,23 @@ Tomar una tarea:
 4. Trabajar fuera del MCP.
 5. `add_task_agent_note` con resumen tecnico.
 6. `update_task_status` a `testing`, `review` o `completed` segun corresponda.
+
+Crear una historia de usuario con tareas:
+1. `get_project_detail` para ver progreso actual.
+2. `create_user_story` con titulo y descripcion.
+3. `create_task` para cada tarea dentro de la nueva historia.
+
+Asignar o reasignar tareas:
+1. `get_task_by_id` para ver asignaciones actuales.
+2. `assign_task` con la lista completa de asignaciones deseadas.
+
+Actualizar detalles de tarea:
+1. `get_task_by_id` para ver estado actual.
+2. `update_task_details` con los campos a modificar.
+
+Agregar comentario:
+1. `get_task_by_id` para validar la tarea.
+2. `create_task_comment` con el texto del comentario.
 
 ## Reglas finales
 

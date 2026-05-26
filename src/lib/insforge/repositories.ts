@@ -1,6 +1,11 @@
 import type {
+  AuditEventRecord,
+  AuditEventRepository,
+  ProjectKeyRecord,
+  ProjectKeyRepository,
   ProjectRepository,
   SprintTaskRepository,
+  TaskAgentNoteRepository,
   UserRepository,
   UserStoryRepository,
 } from "../../application/abstractions/ports";
@@ -20,13 +25,16 @@ import {
   userStoryFromRow,
 } from "./mappers";
 import type {
+  ProjectKeyRow,
   ProjectMemberRow,
   ProjectRow,
   SprintTaskAssignmentRow,
   SprintTaskRow,
+  TaskAgentNoteRow,
   TaskCommentRow,
   UserRow,
   UserStoryRow,
+  AuditEventRow,
 } from "./schema";
 import { InsForgeUnitOfWork } from "./unit-of-work";
 import type { InsForgeUnitOfWorkOptions } from "./unit-of-work";
@@ -240,12 +248,136 @@ export class InsForgeSprintTaskRepository implements SprintTaskRepository {
   }
 }
 
+export class InsForgeTaskAgentNoteRepository implements TaskAgentNoteRepository {
+  constructor(private readonly database: InsForgeDatabaseGateway) {}
+
+  async add(note: Readonly<{
+    id: string;
+    projectId: string;
+    taskId: string;
+    content: string;
+    createdOnUtc: string;
+  }>): Promise<void> {
+    await this.database.insertRows("task_agent_notes", [{
+      id: note.id,
+      project_id: note.projectId,
+      task_id: note.taskId,
+      content: note.content,
+      created_on_utc: note.createdOnUtc,
+    }]);
+  }
+
+  async listByTask(taskId: string, projectId: string): Promise<ReadonlyArray<{
+    id: string;
+    projectId: string;
+    taskId: string;
+    content: string;
+    createdOnUtc: string;
+  }>> {
+    const rows = await this.database.selectRows<TaskAgentNoteRow>("task_agent_notes", {
+      filters: [
+        { operator: "eq", column: "task_id", value: taskId },
+        { operator: "eq", column: "project_id", value: projectId },
+      ],
+      orderBy: { column: "created_on_utc", ascending: true },
+    });
+    return rows.map(row => ({
+      id: row.id,
+      projectId: row.project_id,
+      taskId: row.task_id,
+      content: row.content,
+      createdOnUtc: row.created_on_utc,
+    }));
+  }
+}
+
+export class InsForgeProjectKeyRepository implements ProjectKeyRepository {
+  constructor(private readonly database: InsForgeDatabaseGateway) {}
+
+  async listByProject(projectId: string): Promise<ReadonlyArray<ProjectKeyRecord>> {
+    const rows = await this.database.selectRows<ProjectKeyRow>("project_keys", {
+      filters: [{ operator: "eq", column: "project_id", value: projectId }],
+      orderBy: { column: "created_on_utc", ascending: false },
+    });
+    return rows.map(row => ({
+      id: row.id,
+      projectId: row.project_id,
+      keyHash: row.key_hash,
+      description: row.description,
+      isActive: row.is_active,
+      createdOnUtc: row.created_on_utc,
+    }));
+  }
+
+  async getByIdAndProject(id: string, projectId: string): Promise<ProjectKeyRecord | null> {
+    const row = await this.database.selectOne<ProjectKeyRow>("project_keys", [
+      { operator: "eq", column: "id", value: id },
+      { operator: "eq", column: "project_id", value: projectId },
+    ]);
+    if (row === null) return null;
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      keyHash: row.key_hash,
+      description: row.description,
+      isActive: row.is_active,
+      createdOnUtc: row.created_on_utc,
+    };
+  }
+
+  async add(record: ProjectKeyRecord): Promise<void> {
+    await this.database.insertRows("project_keys", [{
+      id: record.id,
+      project_id: record.projectId,
+      key_hash: record.keyHash,
+      description: record.description,
+      is_active: record.isActive,
+      created_on_utc: record.createdOnUtc,
+    }]);
+  }
+
+  async deactivate(id: string): Promise<void> {
+    await this.database.upsertRows(
+      "project_keys",
+      [{ id, is_active: false }],
+      { onConflict: "id" },
+    );
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.database.deleteRows("project_keys", [
+      { operator: "eq", column: "id", value: id },
+    ]);
+  }
+}
+
+export class InsForgeAuditEventRepository implements AuditEventRepository {
+  constructor(private readonly database: InsForgeDatabaseGateway) {}
+
+  async listRecentByProject(projectId: string, limit: number): Promise<ReadonlyArray<AuditEventRecord>> {
+    const rows = await this.database.selectRows<AuditEventRow>("audit_events", {
+      filters: [{ operator: "eq", column: "project_id", value: projectId }],
+      orderBy: { column: "occurred_on_utc", ascending: false },
+    });
+    return rows.slice(0, limit).map(row => ({
+      id: row.id,
+      action: row.action,
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      occurredOnUtc: row.occurred_on_utc,
+    }));
+  }
+}
+
 export interface InsForgeRepositoryScope {
   readonly unitOfWork: InsForgeUnitOfWork;
   readonly users: InsForgeUserRepository;
   readonly projects: InsForgeProjectRepository;
   readonly userStories: InsForgeUserStoryRepository;
   readonly sprintTasks: InsForgeSprintTaskRepository;
+  readonly taskAgentNotes: InsForgeTaskAgentNoteRepository;
+  readonly projectKeys: InsForgeProjectKeyRepository;
+  readonly auditEvents: InsForgeAuditEventRepository;
 }
 
 export function createInsForgeRepositoryScope(
@@ -259,5 +391,8 @@ export function createInsForgeRepositoryScope(
     projects: new InsForgeProjectRepository(database, unitOfWork),
     userStories: new InsForgeUserStoryRepository(database, unitOfWork),
     sprintTasks: new InsForgeSprintTaskRepository(database, unitOfWork),
+    taskAgentNotes: new InsForgeTaskAgentNoteRepository(database),
+    projectKeys: new InsForgeProjectKeyRepository(database),
+    auditEvents: new InsForgeAuditEventRepository(database),
   };
 }

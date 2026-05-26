@@ -1,5 +1,5 @@
-import DocsClient from "@/components/docs-client";
+import { redirect } from "next/navigation";
 
 export default function DocsPage() {
-  return <DocsClient />;
+  redirect("/documentacion");
 }

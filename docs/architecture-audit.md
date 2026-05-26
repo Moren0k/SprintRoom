@@ -1,20 +1,25 @@
 # Auditoría Arquitectónica del Repositorio
 
 ## 1. Resumen ejecutivo
-La arquitectura está bien encaminada, pero solo parcialmente lista para escalar. El repositorio sí muestra una intención clara de monolito modular con separación entre `src/domain`, `src/application`, `src/lib`, `src/server`, `app/api` y `components`, pero esa disciplina no se mantiene en todos los flujos: el MCP, las rutas de `mcp-keys` y parte del auth evitan la capa de aplicación y escriben directo sobre InsForge.
+La arquitectura está bien encaminada, pero solo parcialmente lista para escalar. El repositorio sí muestra una intención clara de monolito modular con separación entre `src/domain`, `src/application`, `src/lib`, `src/server`, `app/api` y `components`.
 
-El estado actual es adecuado para seguir construyendo producto, pero todavía está en riesgo en tres frentes: consistencia transaccional, endurecimiento de permisos de base de datos y gobierno del canal IA/MCP. No lo consideraría listo para una etapa de escalado serio o de exposición amplia a agentes IA sin un refactor selectivo.
+Actualmente las tres fases de refactor han resuelto los bypass más urgentes:
+- **Fase 1**: toda mutación MCP queda auditada en `audit_events`.
+- **Fase 2**: `McpService` delega `get_task_by_id`, `update_task_status` y `add_task_agent_note` a handlers de `application layer`.
+- **Fase 3**: la gestión de `project_keys`/`mcp-keys` se extrajo a casos de uso en `src/application/features/project-keys.ts`.
+
+Quedan pendientes: consistencia transaccional, endurecimiento de RLS, constraints de integridad multi-tenant, rate limiting, N+1 en listados y observabilidad estructurada. El sistema sigue sin estar listo para escalado serio sin estos refactors, pero la base de aplicación está consolidada.
 
 Calificaciones:
 
 | Dimensión | Nota |
 |---|---:|
 | Escalabilidad | 6/10 |
-| Mantenibilidad | 6/10 |
-| Seguridad | 5/10 |
-| Separación de responsabilidades | 6/10 |
-| Preparación para IA/MCP | 5/10 |
-| Calidad de documentación | 6/10 |
+| Mantenibilidad | 7/10 |
+| Seguridad | 6/10 |
+| Separación de responsabilidades | 7/10 |
+| Preparación para IA/MCP | 7/10 |
+| Calidad de documentación | 7/10 |
 | Calidad de tests | 7/10 |
 
 ## 2. Hallazgos positivos
@@ -46,15 +51,19 @@ Calificaciones:
   Evidencia: `tests/domain/**`, `tests/application/**`, `tests/lib/**`; ejecución real: `npm test` pasó con `21` archivos y `41` tests.
 
 ## 3. Hallazgos críticos
-- El MCP no reutiliza los mismos casos de uso que el API; implementa lógica paralela y escribe directo a base de datos.
-  Evidencia: `app/api/mcp/route.ts`, `src/lib/mcp/service.ts`, contraste con `app/api/tasks/[sprintTaskId]/route.ts` y `src/application/features/tasks.ts`.
-  Impacto: alto. Duplica reglas, dificulta consistencia funcional y deja más superficie para divergencias de permisos, auditoría y validación.
-  Recomendación: mover el MCP a handlers de aplicación compartidos o crear un adaptador MCP que invoque comandos/queries existentes.
 
-- Las operaciones mutantes del MCP no registran auditoría ni trazabilidad del actor técnico que las ejecutó.
-  Evidencia: `src/lib/mcp/service.ts` actualiza `sprint_tasks` y crea `task_agent_notes`; `app/api/mcp/route.ts` no llama `auditLogger.record`; `resolveProjectKey()` devuelve `keyId` pero el route descarta ese dato.
-  Impacto: alto en seguridad, cumplimiento y operación con agentes IA.
-  Recomendación: registrar `projectKeyId`, herramienta, argumentos sanitizados, resultado y correlación temporal para cada `tools/call`.
+### Resueltos (Fase 1-3)
+
+- ~~El MCP no reutiliza los mismos casos de uso que el API; implementa lógica paralela y escribe directo a base de datos.~~
+  **RESUELTO (Fase 2).** `McpService` ahora delega `get_task_by_id`, `update_task_status` y `add_task_agent_note` a handlers en `src/application/features/tasks.ts`. El `runHandler()` wrapper captura `ApplicationError` y lo convierte a `McpServiceError`.
+
+- ~~Las operaciones mutantes del MCP no registran auditoría ni trazabilidad del actor técnico que las ejecutó.~~
+  **RESUELTO (Fase 1).** `McpService.updateTaskStatus()` y `McpService.addTaskAgentNote()` registran `audit_events` con `projectKeyId`, tool, argumentos sanitizados, `entityType`, `entityId`, resultado y error. Ver `src/lib/mcp/service.ts`.
+
+- ~~Hay bypass del application layer en gestión de `mcp-keys`.~~
+  **RESUELTO (Fase 3).** Las rutas `app/api/projects/[projectId]/mcp-keys/**` ahora delegan en `ListProjectMcpKeysHandler`, `CreateProjectMcpKeyHandler`, `DeactivateProjectMcpKeyHandler` y `DeleteProjectMcpKeyHandler` en `src/application/features/project-keys.ts`. El hashing, la validación de permisos y la persistencia están encapsulados en la capa de aplicación.
+
+### Pendientes
 
 - La consistencia de persistencia no tiene transacciones reales; el propio unit of work lo documenta.
   Evidencia: comentario explícito en `src/lib/insforge/unit-of-work.ts`; múltiples escrituras secuenciales en `saveChanges()`.
@@ -64,41 +73,42 @@ Calificaciones:
 - Las políticas RLS finales siguen siendo demasiado permisivas para lectura en varias tablas.
   Evidencia: `migrations/20260523210000_rls-proper-policies.sql` define `projects_select`, `user_stories_select`, `sprint_tasks_select`, `project_members_select`, `task_comments_select`, `task_agent_notes_select`, `audit_events_select` con `request_user_id() IS NOT NULL`.
   Impacto: alto. Si en el futuro se usa el SDK desde cliente o se expone una credencial/token con alcance de usuario, un usuario autenticado podría leer datos cruzados que hoy solo están protegidos por la capa de aplicación.
-  Recomendación: alinear RLS con membresía real por proyecto, no solo con “usuario autenticado”.
+  Recomendación: alinear RLS con membresía real por proyecto, no solo con "usuario autenticado".
 
-- Hay bypasss del application layer en auth y gestión de `mcp-keys`.
-  Evidencia: `app/api/auth/login/route.ts`, `app/api/auth/register/route.ts`, `app/api/projects/[projectId]/mcp-keys/route.ts`, `app/api/projects/[projectId]/mcp-keys/[keyId]/route.ts`.
-  Impacto: alto en mantenibilidad y moderado en seguridad. Las reglas quedan repartidas entre rutas, dominio e infraestructura.
-  Recomendación: crear casos de uso específicos para auth pública y para lifecycle de `project_keys`.
-
-- Existen riesgos de integridad multi-tenant no resueltos a nivel de base de datos.
-  Evidencia: `migrations/20260522223731_application-core-schema.sql` modela `sprint_tasks(project_id, user_story_id)` y `task_agent_notes(project_id, task_id)` sin constraint compuesto que garantice que la tarea pertenezca a la historia o que la nota pertenezca al mismo proyecto que la tarea.
-  Impacto: alto para consistencia de datos y robustez operativa.
-  Recomendación: agregar constraints compuestos o triggers de integridad.
+- Existen riesgos de integridad multi-tenant a nivel de base de datos.
+  Evidencia: `migrations/20260522223731_application-core-schema.sql` modela `sprint_tasks(project_id, user_story_id)` y `task_agent_notes(project_id, task_id)` sin constraint que garantice coherencia cross-tabla.
+  Impacto: alto para consistencia de datos.
+  Recomendación: agregar triggers de integridad que validen que `sprint_tasks.project_id` coincida con `user_stories.project_id` y que `task_agent_notes.project_id` coincida con `sprint_tasks.project_id`.
+  **NOTA (Fase 4A):** Ya existe la migración `20260526120000_cross-table-project-consistency.sql` con triggers. Falta aplicarla en el entorno real y verificar que no hay datos inválidos preexistentes.
 
 - El listado de proyectos tiene patrón N+1 y no escala bien.
   Evidencia: `src/application/features/projects.ts` en `ListProjectsHandler.handle()` itera proyectos y consulta historias y tareas por proyecto.
   Impacto: medio-alto con crecimiento de tenants/proyectos.
   Recomendación: pasar esa vista a un read model agregado o a una consulta optimizada.
 
+- Auth público (login/register) aún implementa lógica directa en rutas sin pasar por handlers de aplicación.
+  Evidencia: `app/api/auth/login/route.ts`, `app/api/auth/register/route.ts`.
+  Impacto: medio en mantenibilidad.
+  Recomendación: extraer a casos de uso compartidos (post-Fase 3).
+
 ## 4. Comparación contra recomendaciones
 
 | Recomendación | Estado actual | Evidencia | Riesgo | Qué falta |
 |---|---|---|---|---|
-| 1. Monolito modular bien organizado | Cumple parcialmente | `src/domain`, `src/application`, `src/lib`, `src/server`, `app/api` | Medio | El MCP, `mcp-keys` y auth aún saltan capas |
-| 2. Separación clara UI/API/application/domain/infra/MCP | Cumple parcialmente | `src/server/application-scope.ts`, `app/api/**`, `src/lib/mcp/**` | Medio | Hay adaptadores mezclados con lógica y accesos directos |
-| 3. MCP, API y Server Actions reutilizan mismos casos de uso | No cumple | API usa handlers en `src/application/features/**`; MCP usa `src/lib/mcp/service.ts`; Server Action solo `src/lib/auth/oauth-actions.ts` | Alto | Unificar MCP y auth con application layer |
-| 4. Lógica de negocio no duplicada ni regada | Cumple parcialmente | Permisos centralizados en `ProjectAccess`, pero `mcp-keys` y auth repiten lógica | Alto | Eliminar caminos paralelos |
-| 5. InsForge encapsulado en adaptadores/repositorios | Cumple parcialmente | `src/lib/insforge/**` bien encapsulado; excepciones en `app/api/mcp/route.ts`, `app/api/projects/[projectId]/mcp-keys/**`, AI routes | Medio | Encapsular excepciones y evitar selects directos desde routes |
+| 1. Monolito modular bien organizado | Cumple parcialmente | `src/domain`, `src/application`, `src/lib`, `src/server`, `app/api` | Medio | Auth público aún salta capas |
+| 2. Separación clara UI/API/application/domain/infra/MCP | Cumple | `src/server/application-scope.ts`, `app/api/**`, `src/lib/mcp/**` | Medio-Bajo | --- |
+| 3. MCP, API y Server Actions reutilizan mismos casos de uso | Cumple parcialmente | API usa handlers; **MCP ahora usa handlers** para `get_task_by_id`, `update_task_status`, `add_task_agent_note`; Server Action solo `src/lib/auth/oauth-actions.ts` | Medio | Unificar auth público con application layer |
+| 4. Lógica de negocio no duplicada ni regada | Cumple | MCP ya no duplica lógica de tasks; `mcp-keys` ya no duplica permisos ni hashing | Medio-Bajo | Auth público aún repite lógica de registro/login |
+| 5. InsForge encapsulado en adaptadores/repositorios | Cumple | `src/lib/insforge/**` bien encapsulado; excepciones históricas corregidas | Medio | AI routes (`app/api/imagine/compile`) aún tienen algo de lógica directa |
 | 6. Permisos siempre en servidor | Cumple parcialmente | `createAuthenticatedApplicationScope()`, `ProjectAccess`, policies de dominio | Medio | MCP usa PROJECT_KEY como permiso total del proyecto sin política funcional adicional |
 | 7. Server Actions validan sesión/input/ownership/permisos | No aplica | Solo existe `src/lib/auth/oauth-actions.ts` | Bajo | Si se agregan acciones de negocio, deben seguir el mismo estándar del API |
-| 8. Tools MCP con validación, permisos, auditoría, errores y respuestas predecibles | Cumple parcialmente | Validación en `src/lib/mcp/tools.ts`; errores controlados en `app/api/mcp/route.ts` | Alto | Falta auditoría, reuse de casos de uso y permisos más finos |
-| 9. Buen modelo de datos | Cumple parcialmente | Migraciones, FKs, índices y timestamps en `migrations/**` | Medio-Alto | Falta soft delete general, constraints compuestos y RLS más estricta |
-| 10. Estrategia clara para IA | Cumple parcialmente | Flujo de idea a proyecto en `app/api/imagine/*` y `src/application/features/imagine.ts` | Alto | MCP aún puede ejecutar escrituras sin confirmación humana explícita ni auditoría |
+| 8. Tools MCP con validación, permisos, auditoría, errores y respuestas predecibles | Cumple | Validación en `src/lib/mcp/tools.ts`; **auditoría obligatoria** para mutaciones; errores controlados en `app/api/mcp/route.ts` | Medio | Permisos más finos por herramienta y confirmación humana para acciones riesgosas |
+| 9. Buen modelo de datos | Cumple parcialmente | Migraciones, FKs, índices, timestamps; **nuevos triggers de consistencia cross-project** | Medio | Falta soft delete general y RLS más estricta |
+| 10. Estrategia clara para IA | Cumple parcialmente | Flujo de idea a proyecto en `app/api/imagine/*` y `src/application/features/imagine.ts` | Alto | MCP aún puede ejecutar escrituras sin confirmación humana explícita |
 | 11. Observabilidad mínima | Cumple parcialmente | `audit_events`, `src/lib/audit/audit-logger.ts`, `console.error` en AI routes | Medio-Alto | Falta logging estructurado y trazabilidad MCP/IA extremo a extremo |
 | 12. Contratos compartidos | Cumple parcialmente | DTOs en `src/application/models/application-dtos.ts`; validadores en `src/server/validation.ts` | Medio | Tipos duplicados en `src/frontend/types.ts` y contratos MCP separados sin source of truth común |
-| 13. Tests relevantes | Cumple parcialmente | `tests/domain/**`, `tests/application/**`, `tests/lib/**` | Medio | Faltan tests de API routes, MCP y de integración real con InsForge |
-| 14. Documentación real y actualizada | Cumple parcialmente | `README.md`, `docs/**`, `.sprintroom/sprintroom-mcp/SKILL.md` | Medio | Hay desalineaciones y problemas de codificación; falta documento explícito de arquitectura y permisos consolidado |
+| 13. Tests relevantes | Cumple | `tests/domain/**`, `tests/application/**`, `tests/lib/**` — **57 tests** | Medio | Faltan tests de API routes, integración real con InsForge y flujos AI/chat |
+| 14. Documentación real y actualizada | Cumple parcialmente | `README.md`, `docs/**`, `.sprintroom/sprintroom-mcp/SKILL.md` | Medio | Falta documento único de arquitectura y matriz de permisos completa |
 
 ## 5. Mapa real de arquitectura actual
 Árbol resumido:

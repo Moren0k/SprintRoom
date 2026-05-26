@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { InsForgeDatabaseGateway, QueryFilter } from "../insforge/database-gateway";
 import type { ProjectKeyRow } from "../insforge/schema";
+import type { KeyHasher } from "../../application/abstractions/ports";
 
 export class McpAuthenticationError extends Error {
   constructor(
@@ -19,6 +20,12 @@ export interface ProjectKeyResolution {
 
 export function hashProjectKey(key: string): string {
   return createHash("sha256").update(key, "utf-8").digest("hex");
+}
+
+export class Sha256KeyHasher implements KeyHasher {
+  hash(key: string): string {
+    return hashProjectKey(key);
+  }
 }
 
 export async function resolveProjectKey(

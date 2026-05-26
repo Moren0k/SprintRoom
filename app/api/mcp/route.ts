@@ -1,8 +1,29 @@
 import { NextResponse } from "next/server";
-import { createInsForgeDatabaseGateway } from "@/src/lib/insforge";
-import { McpService, McpServiceError } from "@/src/lib/mcp/service";
-import { resolveProjectKey, McpAuthenticationError } from "@/src/lib/mcp/auth";
-import { parseToolArgs, MCP_TOOL_DEFINITIONS, McpDispatchError } from "@/src/lib/mcp/tools";
+import { createInsForgeDatabaseGateway, createInsForgeRepositoryScope } from "@/src/lib/insforge";
+import { McpService } from "@/src/lib/mcp/service";
+import { resolveProjectKey } from "@/src/lib/mcp/auth";
+import { parseToolArgs, MCP_TOOL_DEFINITIONS } from "@/src/lib/mcp/tools";
+import { InsForgeAuditLogger } from "@/src/lib/audit/audit-logger";
+import { SystemClock } from "@/src/lib/system-clock";
+import {
+  McpGetSprintTaskDetailHandler,
+  McpUpdateTaskStatusHandler,
+  AddTaskAgentNoteHandler,
+} from "@/src/application/features/tasks";
+import {
+  McpCreateTaskCommentHandler,
+  McpCreateTaskHandler,
+  McpCreateUserStoryHandler,
+  McpUpdateTaskDetailsHandler,
+  McpAssignTaskHandler,
+} from "@/src/application/features/mcp-write";
+import {
+  GetProjectDetailHandler,
+  ListProjectMembersHandler,
+  ListTaskCommentsHandler,
+  ListTaskAgentNotesHandler,
+  GetProjectActivityHandler,
+} from "@/src/application/features/mcp-read";
 
 /**
  * Endpoint MCP para integracion con agentes de IA.
@@ -43,35 +64,113 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // 3. Validate PROJECT_KEY and resolve project
-    const authDatabase = createInsForgeDatabaseGateway();
-    const { projectId } = await resolveProjectKey(authDatabase, projectKey);
     const database = createInsForgeDatabaseGateway();
+    const { projectId, keyId } = await resolveProjectKey(database, projectKey);
+    const auditLogger = new InsForgeAuditLogger(database);
+    const clock = new SystemClock();
+    const repositories = createInsForgeRepositoryScope(database);
+
+    const taskDetailHandler = new McpGetSprintTaskDetailHandler(
+      repositories.sprintTasks,
+    );
+    const updateTaskStatusHandler = new McpUpdateTaskStatusHandler(
+      repositories.sprintTasks,
+      repositories.unitOfWork,
+      clock,
+    );
+    const addTaskAgentNoteHandler = new AddTaskAgentNoteHandler(
+      repositories.sprintTasks,
+      repositories.taskAgentNotes,
+    );
+    const getProjectDetailHandler = new GetProjectDetailHandler(
+      repositories.projects,
+      repositories.userStories,
+      repositories.sprintTasks,
+    );
+    const listProjectMembersHandler = new ListProjectMembersHandler(
+      repositories.projects,
+      repositories.users,
+    );
+    const listTaskCommentsHandler = new ListTaskCommentsHandler(
+      repositories.sprintTasks,
+      repositories.users,
+    );
+    const listTaskAgentNotesHandler = new ListTaskAgentNotesHandler(
+      repositories.sprintTasks,
+      repositories.taskAgentNotes,
+    );
+    const getProjectActivityHandler = new GetProjectActivityHandler(
+      repositories.auditEvents,
+    );
+    const createTaskCommentHandler = new McpCreateTaskCommentHandler(
+      repositories.sprintTasks,
+      repositories.projects,
+      repositories.unitOfWork,
+      clock,
+    );
+    const createTaskHandler = new McpCreateTaskHandler(
+      repositories.sprintTasks,
+      repositories.userStories,
+      repositories.users,
+      repositories.projects,
+      repositories.unitOfWork,
+      clock,
+    );
+    const createUserStoryHandler = new McpCreateUserStoryHandler(
+      repositories.userStories,
+      repositories.unitOfWork,
+      clock,
+    );
+    const updateTaskDetailsHandler = new McpUpdateTaskDetailsHandler(
+      repositories.sprintTasks,
+      repositories.unitOfWork,
+      clock,
+    );
+    const assignTaskHandler = new McpAssignTaskHandler(
+      repositories.sprintTasks,
+      repositories.users,
+      repositories.projects,
+      repositories.unitOfWork,
+      clock,
+    );
+
+    const service = new McpService(
+      database,
+      auditLogger,
+      keyId,
+      taskDetailHandler,
+      updateTaskStatusHandler,
+      addTaskAgentNoteHandler,
+      getProjectDetailHandler,
+      listProjectMembersHandler,
+      listTaskCommentsHandler,
+      listTaskAgentNotesHandler,
+      getProjectActivityHandler,
+      createTaskCommentHandler,
+      createTaskHandler,
+      createUserStoryHandler,
+      updateTaskDetailsHandler,
+      assignTaskHandler,
+    );
 
     // 4. Dispatch by protocol
     if (isJsonRpc) {
-      return handleJsonRpc(projectId, database, body as Record<string, unknown>);
+      return handleJsonRpc(projectId, service, body as Record<string, unknown>);
     }
 
-    return handleCustomHttp(projectId, database, body as Record<string, unknown>);
+    return handleCustomHttp(projectId, service, body as Record<string, unknown>);
   } catch (error) {
-    if (error instanceof McpAuthenticationError) {
-      return isJsonRpc
-        ? mcpRpcError(rpcId, -32000, error.message)
-        : mcpError(error.code, error.message);
+    const message = error instanceof Error ? error.message : "Error interno del servidor MCP.";
+    if (isJsonRpc) {
+      return new Response(
+        JSON.stringify({ jsonrpc: "2.0", id: rpcId, error: { code: -32603, message } }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
     }
-    if (error instanceof McpDispatchError) {
-      return isJsonRpc
-        ? mcpErrorResult(rpcId, error.message)
-        : mcpError("invalid_arguments", error.message);
-    }
-    if (error instanceof McpServiceError) {
-      return isJsonRpc
-        ? mcpErrorResult(rpcId, error.message)
-        : mcpError(error.code, error.message);
-    }
-    return isJsonRpc
-      ? mcpRpcError(rpcId, -32603, "Error interno del servidor MCP.")
-      : mcpError("internal_error", "Error interno del servidor MCP.");
+    return new Response(
+      JSON.stringify({ error: { code: "internal_error", message } }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
   }
 }
 
@@ -80,7 +179,7 @@ export async function POST(request: Request): Promise<Response> {
  */
 async function handleJsonRpc(
   projectId: string,
-  database: ReturnType<typeof createInsForgeDatabaseGateway>,
+  service: McpService,
   body: Record<string, unknown>,
 ): Promise<Response> {
   const id = body.id ?? null;
@@ -116,7 +215,6 @@ async function handleJsonRpc(
         : params;
 
     try {
-      const service = new McpService(database);
       const parsed = parseToolArgs({ ...toolArgs, tool: toolName });
       let result: unknown;
 
@@ -134,6 +232,26 @@ async function handleJsonRpc(
         result = await service.addTaskAgentNote(projectId, parsed);
       } else if (parsed.tool === "get_sprintroom_mcp_skill") {
         result = await service.getSprintroomMcpSkill(projectId, parsed);
+      } else if (parsed.tool === "get_project_detail") {
+        result = await service.getProjectDetail(projectId, parsed);
+      } else if (parsed.tool === "list_project_members") {
+        result = await service.listProjectMembers(projectId, parsed);
+      } else if (parsed.tool === "list_task_comments") {
+        result = await service.listTaskComments(projectId, parsed);
+      } else if (parsed.tool === "list_task_agent_notes") {
+        result = await service.listTaskAgentNotes(projectId, parsed);
+      } else if (parsed.tool === "get_project_activity") {
+        result = await service.getProjectActivity(projectId, parsed);
+      } else if (parsed.tool === "create_task_comment") {
+        result = await service.createTaskComment(projectId, parsed);
+      } else if (parsed.tool === "create_task") {
+        result = await service.createTask(projectId, parsed);
+      } else if (parsed.tool === "create_user_story") {
+        result = await service.createUserStory(projectId, parsed);
+      } else if (parsed.tool === "update_task_details") {
+        result = await service.updateTaskDetails(projectId, parsed);
+      } else if (parsed.tool === "assign_task") {
+        result = await service.assignTask(projectId, parsed);
       } else {
         return mcpErrorResult(id, `Herramienta no disponible: ${toolName}`);
       }
@@ -154,33 +272,57 @@ async function handleJsonRpc(
  */
 async function handleCustomHttp(
   projectId: string,
-  database: ReturnType<typeof createInsForgeDatabaseGateway>,
+  service: McpService,
   body: Record<string, unknown>,
 ): Promise<Response> {
-  const parsed = parseToolArgs(body);
-  const service = new McpService(database);
+  try {
+    const parsed = parseToolArgs(body);
 
-  let result: unknown;
+    let result: unknown;
 
-  if (parsed.tool === "get_project_backlog") {
-    result = await service.getProjectBacklog(projectId, parsed);
-  } else if (parsed.tool === "get_user_story_by_id") {
-    result = await service.getUserStoryById(projectId, parsed);
-  } else if (parsed.tool === "get_task_by_id") {
-    result = await service.getTaskById(projectId, parsed);
-  } else if (parsed.tool === "search_tasks") {
-    result = await service.searchTasks(projectId, parsed);
-  } else if (parsed.tool === "update_task_status") {
-    result = await service.updateTaskStatus(projectId, parsed);
-  } else if (parsed.tool === "add_task_agent_note") {
-    result = await service.addTaskAgentNote(projectId, parsed);
-  } else if (parsed.tool === "get_sprintroom_mcp_skill") {
-    result = await service.getSprintroomMcpSkill(projectId, parsed);
-  } else {
-    return mcpError("unknown_tool", "Herramienta no disponible.");
+    if (parsed.tool === "get_project_backlog") {
+      result = await service.getProjectBacklog(projectId, parsed);
+    } else if (parsed.tool === "get_user_story_by_id") {
+      result = await service.getUserStoryById(projectId, parsed);
+    } else if (parsed.tool === "get_task_by_id") {
+      result = await service.getTaskById(projectId, parsed);
+    } else if (parsed.tool === "search_tasks") {
+      result = await service.searchTasks(projectId, parsed);
+    } else if (parsed.tool === "update_task_status") {
+      result = await service.updateTaskStatus(projectId, parsed);
+    } else if (parsed.tool === "add_task_agent_note") {
+      result = await service.addTaskAgentNote(projectId, parsed);
+    } else if (parsed.tool === "get_sprintroom_mcp_skill") {
+      result = await service.getSprintroomMcpSkill(projectId, parsed);
+    } else if (parsed.tool === "get_project_detail") {
+      result = await service.getProjectDetail(projectId, parsed);
+    } else if (parsed.tool === "list_project_members") {
+      result = await service.listProjectMembers(projectId, parsed);
+    } else if (parsed.tool === "list_task_comments") {
+      result = await service.listTaskComments(projectId, parsed);
+    } else if (parsed.tool === "list_task_agent_notes") {
+      result = await service.listTaskAgentNotes(projectId, parsed);
+    } else if (parsed.tool === "get_project_activity") {
+      result = await service.getProjectActivity(projectId, parsed);
+    } else if (parsed.tool === "create_task_comment") {
+      result = await service.createTaskComment(projectId, parsed);
+    } else if (parsed.tool === "create_task") {
+      result = await service.createTask(projectId, parsed);
+    } else if (parsed.tool === "create_user_story") {
+      result = await service.createUserStory(projectId, parsed);
+    } else if (parsed.tool === "update_task_details") {
+      result = await service.updateTaskDetails(projectId, parsed);
+    } else if (parsed.tool === "assign_task") {
+      result = await service.assignTask(projectId, parsed);
+    } else {
+      return mcpError("unknown_tool", "Herramienta no disponible.");
+    }
+
+    return NextResponse.json({ data: result }, { status: 200 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error en la ejecucion de la herramienta.";
+    return mcpError("tool_error", message);
   }
-
-  return NextResponse.json({ data: result }, { status: 200 });
 }
 
 /**

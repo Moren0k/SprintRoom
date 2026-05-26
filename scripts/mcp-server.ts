@@ -1,8 +1,29 @@
 import { createInterface } from "node:readline";
-import { createInsForgeDatabaseGateway } from "@/src/lib/insforge";
+import { createInsForgeDatabaseGateway, createInsForgeRepositoryScope } from "@/src/lib/insforge";
 import { McpService } from "@/src/lib/mcp/service";
 import { resolveProjectKey, McpAuthenticationError } from "@/src/lib/mcp/auth";
 import { parseToolArgs, MCP_TOOL_DEFINITIONS } from "@/src/lib/mcp/tools";
+import { InsForgeAuditLogger } from "@/src/lib/audit/audit-logger";
+import { SystemClock } from "@/src/lib/system-clock";
+import {
+  McpGetSprintTaskDetailHandler,
+  McpUpdateTaskStatusHandler,
+  AddTaskAgentNoteHandler,
+} from "@/src/application/features/tasks";
+import {
+  GetProjectDetailHandler,
+  ListProjectMembersHandler,
+  ListTaskCommentsHandler,
+  ListTaskAgentNotesHandler,
+  GetProjectActivityHandler,
+} from "@/src/application/features/mcp-read";
+import {
+  McpCreateTaskCommentHandler,
+  McpCreateTaskHandler,
+  McpCreateUserStoryHandler,
+  McpUpdateTaskDetailsHandler,
+  McpAssignTaskHandler,
+} from "@/src/application/features/mcp-write";
 
 const SERVER_NAME = "sprintroom-mcp";
 const SERVER_VERSION = "mcp-sprintroom-1.0";
@@ -109,6 +130,26 @@ async function handleToolsCall(
       result = await service.addTaskAgentNote(projectId, parsed);
     } else if (parsed.tool === "get_sprintroom_mcp_skill") {
       result = await service.getSprintroomMcpSkill(projectId, parsed);
+    } else if (parsed.tool === "get_project_detail") {
+      result = await service.getProjectDetail(projectId, parsed);
+    } else if (parsed.tool === "list_project_members") {
+      result = await service.listProjectMembers(projectId, parsed);
+    } else if (parsed.tool === "list_task_comments") {
+      result = await service.listTaskComments(projectId, parsed);
+    } else if (parsed.tool === "list_task_agent_notes") {
+      result = await service.listTaskAgentNotes(projectId, parsed);
+    } else if (parsed.tool === "get_project_activity") {
+      result = await service.getProjectActivity(projectId, parsed);
+    } else if (parsed.tool === "create_task_comment") {
+      result = await service.createTaskComment(projectId, parsed);
+    } else if (parsed.tool === "create_task") {
+      result = await service.createTask(projectId, parsed);
+    } else if (parsed.tool === "create_user_story") {
+      result = await service.createUserStory(projectId, parsed);
+    } else if (parsed.tool === "update_task_details") {
+      result = await service.updateTaskDetails(projectId, parsed);
+    } else if (parsed.tool === "assign_task") {
+      result = await service.assignTask(projectId, parsed);
     } else {
       jsonRpcError(id, -32602, `Herramienta no disponible: ${toolName}`);
       return;
@@ -195,11 +236,95 @@ async function main(): Promise<void> {
   }
 
   try {
-    const authDatabase = createInsForgeDatabaseGateway();
-    const resolution = await resolveProjectKey(authDatabase, projectKey);
-    projectId = resolution.projectId;
     const database = createInsForgeDatabaseGateway();
-    service = new McpService(database);
+    const resolution = await resolveProjectKey(database, projectKey);
+    projectId = resolution.projectId;
+    const auditLogger = new InsForgeAuditLogger(database);
+    const clock = new SystemClock();
+    const repositories = createInsForgeRepositoryScope(database);
+
+    const taskDetailHandler = new McpGetSprintTaskDetailHandler(
+      repositories.sprintTasks,
+    );
+    const updateTaskStatusHandler = new McpUpdateTaskStatusHandler(
+      repositories.sprintTasks,
+      repositories.unitOfWork,
+      clock,
+    );
+    const addTaskAgentNoteHandler = new AddTaskAgentNoteHandler(
+      repositories.sprintTasks,
+      repositories.taskAgentNotes,
+    );
+    const getProjectDetailHandler = new GetProjectDetailHandler(
+      repositories.projects,
+      repositories.userStories,
+      repositories.sprintTasks,
+    );
+    const listProjectMembersHandler = new ListProjectMembersHandler(
+      repositories.projects,
+      repositories.users,
+    );
+    const listTaskCommentsHandler = new ListTaskCommentsHandler(
+      repositories.sprintTasks,
+      repositories.users,
+    );
+    const listTaskAgentNotesHandler = new ListTaskAgentNotesHandler(
+      repositories.sprintTasks,
+      repositories.taskAgentNotes,
+    );
+    const getProjectActivityHandler = new GetProjectActivityHandler(
+      repositories.auditEvents,
+    );
+    const createTaskCommentHandler = new McpCreateTaskCommentHandler(
+      repositories.sprintTasks,
+      repositories.projects,
+      repositories.unitOfWork,
+      clock,
+    );
+    const createTaskHandler = new McpCreateTaskHandler(
+      repositories.sprintTasks,
+      repositories.userStories,
+      repositories.users,
+      repositories.projects,
+      repositories.unitOfWork,
+      clock,
+    );
+    const createUserStoryHandler = new McpCreateUserStoryHandler(
+      repositories.userStories,
+      repositories.unitOfWork,
+      clock,
+    );
+    const updateTaskDetailsHandler = new McpUpdateTaskDetailsHandler(
+      repositories.sprintTasks,
+      repositories.unitOfWork,
+      clock,
+    );
+    const assignTaskHandler = new McpAssignTaskHandler(
+      repositories.sprintTasks,
+      repositories.users,
+      repositories.projects,
+      repositories.unitOfWork,
+      clock,
+    );
+
+    service = new McpService(
+      database,
+      auditLogger,
+      resolution.keyId,
+      taskDetailHandler,
+      updateTaskStatusHandler,
+      addTaskAgentNoteHandler,
+      getProjectDetailHandler,
+      listProjectMembersHandler,
+      listTaskCommentsHandler,
+      listTaskAgentNotesHandler,
+      getProjectActivityHandler,
+      createTaskCommentHandler,
+      createTaskHandler,
+      createUserStoryHandler,
+      updateTaskDetailsHandler,
+      assignTaskHandler,
+    );
     logStderr(`Iniciado para projectId: ${projectId}`);
   } catch (error) {
     if (error instanceof McpAuthenticationError) {

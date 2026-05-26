@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline";
 const SERVER_NAME = "sprintroom-mcp";
-const SERVER_VERSION = "1.0.1";
+const SERVER_VERSION = "1.1.0";
 const PROTOCOL_VERSION = "0.1.0";
 function getEnv(name) {
     return (process.env[name] ?? "").trim();

@@ -9,6 +9,16 @@ import type {
   UpdateTaskStatusArgs,
   AddTaskAgentNoteArgs,
   GetSprintroomMcpSkillArgs,
+  GetProjectDetailArgs,
+  ListProjectMembersArgs,
+  ListTaskCommentsArgs,
+  ListTaskAgentNotesArgs,
+  GetProjectActivityArgs,
+  CreateTaskCommentArgs,
+  CreateTaskArgs,
+  CreateUserStoryArgs,
+  UpdateTaskDetailsArgs,
+  AssignTaskArgs,
 } from "./types";
 
 /**
@@ -160,6 +170,166 @@ export const MCP_TOOL_DEFINITIONS: ReadonlyArray<McpToolDefinition> = [
       required: ["tool"],
     },
   },
+  {
+    name: "get_project_detail",
+    description:
+      "Obtiene informacion detallada del proyecto actual: nombre, descripcion, referencia externa, progreso, conteo de historias, tareas, tareas completadas y miembros.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: {
+          type: "string",
+          const: "get_project_detail",
+        },
+      },
+      required: ["tool"],
+    },
+  },
+  {
+    name: "list_project_members",
+    description:
+      "Lista los miembros del proyecto actual con sus roles, nombres, correos y fecha de ingreso.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: {
+          type: "string",
+          const: "list_project_members",
+        },
+      },
+      required: ["tool"],
+    },
+  },
+  {
+    name: "list_task_comments",
+    description:
+      "Obtiene los comentarios de una tarea especifica, incluyendo autor, contenido y fecha.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: {
+          type: "string",
+          const: "list_task_comments",
+        },
+        taskId: {
+          type: "string",
+          description: "UUID de la tarea",
+        },
+      },
+      required: ["tool", "taskId"],
+    },
+  },
+  {
+    name: "list_task_agent_notes",
+    description:
+      "Obtiene las notas de agente registradas en una tarea especifica.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: {
+          type: "string",
+          const: "list_task_agent_notes",
+        },
+        taskId: {
+          type: "string",
+          description: "UUID de la tarea",
+        },
+      },
+      required: ["tool", "taskId"],
+    },
+  },
+  {
+    name: "get_project_activity",
+    description:
+      "Obtiene eventos recientes de auditoria del proyecto. Por defecto devuelve los 20 ultimos eventos.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: {
+          type: "string",
+          const: "get_project_activity",
+        },
+        limit: {
+          type: "number",
+          description: "Numero maximo de eventos a devolver (max 50, default 20)",
+        },
+      },
+      required: ["tool"],
+    },
+  },
+  {
+    name: "create_task_comment",
+    description:
+      "Agrega un comentario a una tarea existente. El autor del comentario se asigna automaticamente como el propietario del proyecto.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: { type: "string", const: "create_task_comment" },
+        taskId: { type: "string", description: "UUID de la tarea" },
+        body: { type: "string", description: "Contenido del comentario (max 2000 caracteres)" },
+      },
+      required: ["tool", "taskId", "body"],
+    },
+  },
+  {
+    name: "create_task",
+    description:
+      "Crea una nueva tarea dentro de una historia de usuario existente. Opcionalmente asigna usuarios del proyecto.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: { type: "string", const: "create_task" },
+        userStoryId: { type: "string", description: "UUID de la historia de usuario" },
+        title: { type: "string", description: "Titulo de la tarea (max 160 caracteres)" },
+        description: { type: "string", description: "Descripcion de la tarea (opcional, max 2000 caracteres)" },
+        assigneeIds: { type: "array", items: { type: "string" }, description: "UUIDs de usuarios a asignar (opcional)" },
+      },
+      required: ["tool", "userStoryId", "title"],
+    },
+  },
+  {
+    name: "create_user_story",
+    description:
+      "Crea una nueva historia de usuario en el proyecto actual.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: { type: "string", const: "create_user_story" },
+        title: { type: "string", description: "Titulo de la historia de usuario (max 160 caracteres)" },
+        description: { type: "string", description: "Descripcion (opcional, max 2000 caracteres)" },
+      },
+      required: ["tool", "title"],
+    },
+  },
+  {
+    name: "update_task_details",
+    description:
+      "Actualiza el titulo y/o descripcion de una tarea existente. Solo se actualizan los campos proporcionados.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: { type: "string", const: "update_task_details" },
+        taskId: { type: "string", description: "UUID de la tarea" },
+        title: { type: "string", description: "Nuevo titulo (opcional, max 160 caracteres)" },
+        description: { type: "string", description: "Nueva descripcion (opcional, max 2000 caracteres)" },
+      },
+      required: ["tool", "taskId"],
+    },
+  },
+  {
+    name: "assign_task",
+    description:
+      "Reemplaza los usuarios asignados a una tarea. Los usuarios deben existir y pertenecer al proyecto.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: { type: "string", const: "assign_task" },
+        taskId: { type: "string", description: "UUID de la tarea" },
+        assigneeIds: { type: "array", items: { type: "string" }, description: "UUIDs de usuarios a asignar" },
+      },
+      required: ["tool", "taskId", "assigneeIds"],
+    },
+  },
 ];
 
 export function isKnownTool(value: string): value is McpToolName {
@@ -249,6 +419,138 @@ export function parseToolArgs(body: Record<string, unknown>): McpToolArgument {
 
     case "get_sprintroom_mcp_skill":
       return { tool } as GetSprintroomMcpSkillArgs;
+
+    case "get_project_detail":
+      return { tool } as GetProjectDetailArgs;
+
+    case "list_project_members":
+      return { tool } as ListProjectMembersArgs;
+
+    case "list_task_comments": {
+      const taskId = body.taskId;
+      if (typeof taskId !== "string" || taskId.length === 0) {
+        throw new McpDispatchError("taskId es obligatorio.");
+      }
+      return { tool, taskId } as ListTaskCommentsArgs;
+    }
+
+    case "list_task_agent_notes": {
+      const taskId = body.taskId;
+      if (typeof taskId !== "string" || taskId.length === 0) {
+        throw new McpDispatchError("taskId es obligatorio.");
+      }
+      return { tool, taskId } as ListTaskAgentNotesArgs;
+    }
+
+    case "get_project_activity": {
+      const limit = body.limit;
+      if (limit !== undefined) {
+        if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1) {
+          throw new McpDispatchError("limit debe ser un numero entero positivo.");
+        }
+        if (limit > 50) {
+          throw new McpDispatchError("limit no puede exceder 50.");
+        }
+      }
+      return {
+        tool,
+        limit: limit as number | undefined,
+      } as GetProjectActivityArgs;
+    }
+
+    /* ============ Fase 5B: Write tools ============ */
+
+    case "create_task_comment": {
+      const taskId = body.taskId;
+      if (typeof taskId !== "string" || taskId.length === 0) {
+        throw new McpDispatchError("taskId es obligatorio.");
+      }
+      const cbody = body.body;
+      if (typeof cbody !== "string" || cbody.trim().length === 0) {
+        throw new McpDispatchError("body es obligatorio y debe ser texto.");
+      }
+      return { tool, taskId, body: cbody } as CreateTaskCommentArgs;
+    }
+
+    case "create_task": {
+      const userStoryId = body.userStoryId;
+      if (typeof userStoryId !== "string" || userStoryId.length === 0) {
+        throw new McpDispatchError("userStoryId es obligatorio.");
+      }
+      const title = body.title;
+      if (typeof title !== "string" || title.trim().length === 0) {
+        throw new McpDispatchError("title es obligatorio.");
+      }
+      const description = body.description;
+      if (description !== undefined && typeof description !== "string") {
+        throw new McpDispatchError("description debe ser texto.");
+      }
+      const assigneeIds = body.assigneeIds;
+      if (assigneeIds !== undefined) {
+        if (!Array.isArray(assigneeIds) || !assigneeIds.every((id) => typeof id === "string")) {
+          throw new McpDispatchError("assigneeIds debe ser un arreglo de UUIDs.");
+        }
+      }
+      return {
+        tool,
+        userStoryId,
+        title,
+        description: description as string | undefined,
+        assigneeIds: assigneeIds as ReadonlyArray<string> | undefined,
+      } as CreateTaskArgs;
+    }
+
+    case "create_user_story": {
+      const title = body.title;
+      if (typeof title !== "string" || title.trim().length === 0) {
+        throw new McpDispatchError("title es obligatorio.");
+      }
+      const description = body.description;
+      if (description !== undefined && typeof description !== "string") {
+        throw new McpDispatchError("description debe ser texto.");
+      }
+      return {
+        tool,
+        title,
+        description: description as string | undefined,
+      } as CreateUserStoryArgs;
+    }
+
+    case "update_task_details": {
+      const taskId = body.taskId;
+      if (typeof taskId !== "string" || taskId.length === 0) {
+        throw new McpDispatchError("taskId es obligatorio.");
+      }
+      const title = body.title;
+      if (title !== undefined && (typeof title !== "string" || title.trim().length === 0)) {
+        throw new McpDispatchError("title debe ser texto no vacio.");
+      }
+      const description = body.description;
+      if (description !== undefined && typeof description !== "string") {
+        throw new McpDispatchError("description debe ser texto.");
+      }
+      if (title === undefined && description === undefined) {
+        throw new McpDispatchError("Debe especificar al menos title o description.");
+      }
+      return {
+        tool,
+        taskId,
+        title: title as string | undefined,
+        description: description as string | undefined,
+      } as UpdateTaskDetailsArgs;
+    }
+
+    case "assign_task": {
+      const taskId = body.taskId;
+      if (typeof taskId !== "string" || taskId.length === 0) {
+        throw new McpDispatchError("taskId es obligatorio.");
+      }
+      const assigneeIds = body.assigneeIds;
+      if (!Array.isArray(assigneeIds) || !assigneeIds.every((id) => typeof id === "string")) {
+        throw new McpDispatchError("assigneeIds debe ser un arreglo de UUIDs.");
+      }
+      return { tool, taskId, assigneeIds: assigneeIds as ReadonlyArray<string> } as AssignTaskArgs;
+    }
 
     default:
       throw new McpDispatchError(`Herramienta no implementada: ${tool}`);

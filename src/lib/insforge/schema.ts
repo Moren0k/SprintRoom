@@ -85,6 +85,7 @@ export interface TaskAgentNoteRow {
 
 export interface AuditEventRow {
   readonly id: string;
+  readonly project_id: string | null;
   readonly actor_id: string | null;
   readonly action: string;
   readonly entity_type: string;

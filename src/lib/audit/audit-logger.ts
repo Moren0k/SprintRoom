@@ -5,6 +5,7 @@ import type { AuditEventRow } from "../insforge/schema";
 
 export interface RecordAuditEventInput {
   readonly actorId: UserId | null;
+  readonly projectId?: string;
   readonly action: string;
   readonly entityType: string;
   readonly entityId: string;
@@ -18,6 +19,7 @@ export class InsForgeAuditLogger {
   async record(input: RecordAuditEventInput): Promise<void> {
     const row: AuditEventRow = {
       id: randomUUID(),
+      project_id: input.projectId ?? null,
       actor_id: input.actorId,
       action: input.action,
       entity_type: input.entityType,
