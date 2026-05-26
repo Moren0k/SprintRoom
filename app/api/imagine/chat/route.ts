@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/src/server/rate-limit";
 
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -51,6 +56,10 @@ REGLAS ESTRICTAS:
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const ipLimit = checkRateLimit("imagine", ip);
+    if (!ipLimit.allowed) return rateLimitResponse(ipLimit.resetMs);
+
     const body = await request.json().catch(() => ({}));
     const messages = body.messages;
 

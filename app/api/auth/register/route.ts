@@ -6,13 +6,25 @@ import { PersonName } from "@/src/domain/value-objects/person-name";
 import { ApplicationError } from "@/src/application";
 import { created, handleRouteError, readJsonObject } from "@/src/server/http";
 import { requireString } from "@/src/server/validation";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/src/server/rate-limit";
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const ip = getClientIp(request);
+    const ipLimit = checkRateLimit("register", ip);
+    if (!ipLimit.allowed) return rateLimitResponse(ipLimit.resetMs);
+
     const body = await readJsonObject(request);
     const fullName = requireString(body, "fullName").trim();
     const email = requireString(body, "email").trim();
     const password = requireString(body, "password");
+
+    const emailLimit = checkRateLimit("register", email);
+    if (!emailLimit.allowed) return rateLimitResponse(emailLimit.resetMs);
 
     const existingByEmail = await createApplicationScope().repositories.users.getByEmail(email);
     if (existingByEmail !== null) {

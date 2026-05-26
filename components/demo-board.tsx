@@ -226,10 +226,10 @@ export default function DemoBoard() {
                   <span
                     className={`h-2 w-2 rounded-full ${
                       col.id === "backlog"
-                        ? "bg-amber-400"
+                        ? "bg-[var(--foreground)]/20"
                         : col.id === "en-progreso"
-                          ? "bg-sky-400"
-                          : "bg-emerald-400"
+                          ? "bg-[var(--foreground)]/40"
+                          : "bg-[var(--foreground)]/60"
                     }`}
                   />
                   <h4 className="text-sm font-semibold text-[var(--foreground)]">

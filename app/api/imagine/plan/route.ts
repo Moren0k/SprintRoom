@@ -2,6 +2,11 @@ import { PlanProjectFromIdeaHandler } from "../../../../src/application";
 import { createAuthenticatedApplicationScope } from "../../../../src/server/application-scope";
 import { created, handleRouteError, readJsonObject } from "../../../../src/server/http";
 import { requireString } from "../../../../src/server/validation";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "../../../../src/server/rate-limit";
 
 interface PlannedTaskInput {
   title: string;
@@ -16,6 +21,10 @@ interface PlannedUserStoryInput {
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const ip = getClientIp(request);
+    const ipLimit = checkRateLimit("imagine", ip);
+    if (!ipLimit.allowed) return rateLimitResponse(ipLimit.resetMs);
+
     const body = await readJsonObject(request);
     const scope = await createAuthenticatedApplicationScope(request);
 

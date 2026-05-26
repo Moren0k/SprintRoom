@@ -15,6 +15,7 @@ import type {
   QueryHandler,
 } from "../abstractions/messages";
 import type {
+  AuditEventRepository,
   Clock,
   ProjectRepository,
   SprintTaskRepository,
@@ -281,5 +282,61 @@ export class GetProjectDetailHandler
       this.userStoryRepository,
       this.sprintTaskRepository,
     );
+  }
+}
+
+/* ===================== Project Activity ====================== */
+
+export interface ListProjectActivityQuery {
+  readonly requestContext: RequestContext;
+  readonly projectId: string;
+  readonly limit?: number;
+}
+
+export interface ProjectActivityEvent {
+  readonly id: string;
+  readonly action: string;
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly occurredOnUtc: string;
+}
+
+export class ListProjectActivityHandler
+  implements QueryHandler<ListProjectActivityQuery, ReadonlyArray<ProjectActivityEvent>>
+{
+  private static readonly DEFAULT_LIMIT = 20;
+  private static readonly MAX_LIMIT = 50;
+
+  constructor(
+    private readonly projectRepository: ProjectRepository,
+    private readonly auditEventRepository: AuditEventRepository,
+  ) {}
+
+  async handle(
+    query: ListProjectActivityQuery,
+  ): Promise<ReadonlyArray<ProjectActivityEvent>> {
+    await ProjectAccess.loadProjectForVisibility(
+      this.projectRepository,
+      query.requestContext,
+      ProjectId.from(query.projectId),
+    );
+
+    const limit = Math.min(
+      Math.max(1, query.limit ?? ListProjectActivityHandler.DEFAULT_LIMIT),
+      ListProjectActivityHandler.MAX_LIMIT,
+    );
+
+    const events = await this.auditEventRepository.listRecentByProject(
+      query.projectId,
+      limit,
+    );
+
+    return events.map((event) => ({
+      id: event.id,
+      action: event.action,
+      entityType: event.entityType,
+      entityId: event.entityId,
+      occurredOnUtc: event.occurredOnUtc,
+    }));
   }
 }

@@ -7,6 +7,7 @@ import { apiRequest, getErrorMessage } from "@/src/frontend/api-client";
 import type {
   McpProjectKeyCreated,
   McpProjectKeySummary,
+  ProjectActivityEvent,
   ProjectDetail,
   ProjectMemberDetail,
   ProjectRole,
@@ -28,6 +29,7 @@ import {
   TextArea,
   TextInput,
 } from "./ui";
+import ProjectActivityClient from "./project-activity-client";
 
 const PROJECT_ROLES: ProjectRole[] = ["Viewer", "Contributor", "Maintainer", "Owner"];
 
@@ -414,6 +416,7 @@ export default function ProjectDetailClient({
           )}
 
           <McpIntegrationCard
+            projectId={projectId}
             busy={busy}
             keys={mcpKeys}
             newKey={newMcpKey}
@@ -424,6 +427,8 @@ export default function ProjectDetailClient({
             onDelete={startDeleteKey}
             onCopyPrompt={copyMcpPrompt}
           />
+
+          <ProjectActivityClient projectId={projectId} />
         </div>
 
         <Card>
@@ -532,6 +537,7 @@ async function fetchMcpKeys(projectId: string): Promise<McpProjectKeySummary[]> 
 }
 
 function McpIntegrationCard({
+  projectId,
   busy,
   keys,
   newKey,
@@ -542,6 +548,7 @@ function McpIntegrationCard({
   onDelete,
   onCopyPrompt,
 }: {
+  readonly projectId: string;
   readonly busy: boolean;
   readonly keys: McpProjectKeySummary[];
   readonly newKey: McpProjectKeyCreated | null;
@@ -554,12 +561,75 @@ function McpIntegrationCard({
 }) {
   const origin = typeof window === "undefined" ? "https://tu-dominio" : window.location.origin;
 
+  const activeKeys = keys.filter((k) => k.isActive);
+  const hasActiveKeys = activeKeys.length > 0;
+
+  const [latestActivity, setLatestActivity] = useState<ProjectActivityEvent | null>(null);
+  const [activityLoading, setActivityLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setActivityLoading(true);
+      try {
+        const data = await apiRequest<ReadonlyArray<ProjectActivityEvent>>(
+          `/api/projects/${projectId}/activity?limit=1`,
+        );
+        if (!cancelled && data.length > 0) setLatestActivity(data[0]);
+      } catch {
+        /* activity is best-effort */
+      } finally {
+        if (!cancelled) setActivityLoading(false);
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [projectId]);
+
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-[var(--foreground)]">Integracion con IA (MCP)</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-[var(--foreground)]">Integracion con IA (MCP)</h2>
+        <Pill className={hasActiveKeys ? "bg-emerald-500/10 text-emerald-600" : "opacity-60"}>
+          {hasActiveKeys ? `${activeKeys.length} activa(s)` : "Sin clave"}
+        </Pill>
+      </div>
+
       <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-        Genera una PROJECT_KEY por proyecto para conectar agentes como OpenCode, Codex, Claude Code o Claude Desktop al backlog de este proyecto.
+        Conecta agentes como OpenCode, Codex, Claude Code o Claude Desktop al backlog de este proyecto usando el protocolo MCP.
       </p>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg border border-[var(--hairline)] bg-[var(--background)] p-3">
+          <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Endpoint</p>
+          <p className="mt-0.5 truncate font-mono text-xs text-[var(--foreground)]">{origin}/api/mcp</p>
+          <CopyButton value={`${origin}/api/mcp`} label="Copiar endpoint" />
+        </div>
+        <div className="rounded-lg border border-[var(--hairline)] bg-[var(--background)] p-3">
+          <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
+            {activityLoading ? "Cargando actividad..." : latestActivity !== null ? "Ultima actividad" : "Sin actividad"}
+          </p>
+          {latestActivity !== null ? (
+            <>
+              <p className="mt-0.5 truncate text-xs text-[var(--foreground)]">
+                {inferDescription(latestActivity.action, latestActivity.entityType, latestActivity.entityId)}
+              </p>
+              <p className="text-[10px] text-[var(--muted)]">{timeAgo(latestActivity.occurredOnUtc)}</p>
+            </>
+          ) : (
+            <p className="mt-0.5 text-xs text-[var(--muted)]">
+              {activityLoading ? "..." : "Aun no hay eventos"}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button type="button" variant="ghost" onClick={() => onCopyPrompt(false)}>
+          Copiar prompt de instalacion
+        </Button>
+        <CopyButton value={`${origin}/api/mcp`} label="Copiar endpoint" />
+      </div>
 
       <form onSubmit={onCreate} className="mt-5 flex flex-col gap-3 sm:flex-row">
         <TextInput
@@ -602,9 +672,7 @@ function McpIntegrationCard({
                 <pre className="overflow-x-auto rounded-lg border border-[var(--hairline)] bg-[var(--background)] p-3 text-[11px] leading-5 text-[var(--foreground)]">
                   {buildOpenCodeConfig(origin)}
                 </pre>
-                <Button type="button" variant="secondary" className="mt-2" onClick={() => copyText(buildOpenCodeConfig(origin))}>
-                  Copiar config OpenCode
-                </Button>
+                <CopyButton value={buildOpenCodeConfig(origin)} label="Copiar config OpenCode" />
               </div>
 
               <div>
@@ -614,9 +682,7 @@ function McpIntegrationCard({
                   {buildCodexConfigEnv(origin)}
                 </pre>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Button type="button" variant="secondary" onClick={() => copyText(buildCodexConfigEnv(origin))}>
-                    Copiar (env-var)
-                  </Button>
+                  <CopyButton value={buildCodexConfigEnv(origin)} label="Copiar (env-var)" />
                   <Button type="button" variant="ghost" onClick={() => copyText(buildCodexConfigRaw(origin, newKey.rawKey))}>
                     Copiar con clave directa
                   </Button>
@@ -630,9 +696,7 @@ function McpIntegrationCard({
                   {buildClaudeCodeCommandEnv(origin)}
                 </pre>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Button type="button" variant="secondary" onClick={() => copyText(buildClaudeCodeCommandEnv(origin))}>
-                    Copiar comando (env-var)
-                  </Button>
+                  <CopyButton value={buildClaudeCodeCommandEnv(origin)} label="Copiar comando (env-var)" />
                   <Button type="button" variant="ghost" onClick={() => copyText(buildClaudeCodeCommandRaw(origin, newKey.rawKey))}>
                     Copiar con clave directa
                   </Button>
@@ -646,9 +710,7 @@ function McpIntegrationCard({
                   {buildClaudeDesktopConfigEnv(origin)}
                 </pre>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Button type="button" variant="secondary" onClick={() => copyText(buildClaudeDesktopConfigEnv(origin))}>
-                    Copiar (env-var)
-                  </Button>
+                  <CopyButton value={buildClaudeDesktopConfigEnv(origin)} label="Copiar (env-var)" />
                   <Button type="button" variant="ghost" onClick={() => copyText(buildClaudeDesktopConfigRaw(origin, newKey.rawKey))}>
                     Copiar con clave directa
                   </Button>
@@ -658,11 +720,6 @@ function McpIntegrationCard({
               <p className="text-xs text-[var(--muted)]">
                 <strong>Advertencia de seguridad:</strong> Nunca compartas la PROJECT_KEY en chats, commits o documentacion.
                 Si sospechas que fue comprometida, desactivala y genera una nueva desde esta seccion.
-              </p>
-              <p className="text-xs text-[var(--muted)]">
-                <strong>Version:</strong> @sprintroom/mcp v1.0.0 usa definiciones de herramientas incrustadas.
-                Si las herramientas del backend cambian, el paquete debe actualizarse.
-                Sigue semver: PATCH (bugfix), MINOR (nuevas herramientas), MAJOR (breaking changes).
               </p>
             </div>
           </details>
@@ -698,9 +755,126 @@ function McpIntegrationCard({
           ))
         )}
       </div>
+
+      <details className="group mt-6">
+        <summary className="cursor-pointer text-sm font-medium text-[var(--foreground)] hover:opacity-80">
+          Herramientas disponibles (17)
+        </summary>
+        <div className="mt-4 space-y-4">
+          <ToolGroup
+            icon="📖"
+            label="Lectura"
+            count={9}
+            tools={READ_TOOLS}
+          />
+          <ToolGroup
+            icon="✏️"
+            label="Escritura no destructiva"
+            count={7}
+            tools={WRITE_TOOLS}
+          />
+          <ToolGroup
+            icon="⚙️"
+            label="Skill / setup"
+            count={1}
+            tools={SKILL_TOOLS}
+          />
+        </div>
+      </details>
+
+      <details className="group mt-4">
+        <summary className="cursor-pointer text-sm font-medium text-[var(--foreground)] hover:opacity-80">
+          Seguridad
+        </summary>
+        <div className="mt-3 space-y-2 text-xs text-[var(--muted)]">
+          <p>
+            La PROJECT_KEY otorga acceso de lectura y escritura <strong>solo a este proyecto</strong>.
+            Cada proyecto tiene su propia clave.
+          </p>
+          <p>
+            No compartas la clave en chats, commits, documentacion ni notas de agente.
+            Si sospechas que fue comprometida, desactivala desde esta seccion y genera una nueva.
+          </p>
+          <p>
+            Las claves se almacenan como hash SHA-256. El valor plano solo se muestra una vez al crearla.
+          </p>
+        </div>
+      </details>
     </Card>
   );
 }
+
+function CopyButton({ value, label }: { readonly value: string; readonly label: string }) {
+  return (
+    <Button type="button" variant="ghost" onClick={() => copyText(value)}>
+      {label}
+    </Button>
+  );
+}
+
+function ToolGroup({
+  icon,
+  label,
+  count,
+  tools,
+}: {
+  readonly icon: string;
+  readonly label: string;
+  readonly count: number;
+  readonly tools: ReadonlyArray<{ readonly name: string; readonly description: string }>;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-[var(--hairline)] bg-[var(--background)] p-3">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between text-left"
+      >
+        <span className="text-xs font-semibold text-[var(--foreground)]">
+          {icon} {label} ({count})
+        </span>
+        <span className="text-[10px] text-[var(--muted)]">{open ? "ocultar" : "ver"}</span>
+      </button>
+      {open && (
+        <ul className="mt-2 space-y-1">
+          {tools.map((t) => (
+            <li key={t.name} className="flex flex-col">
+              <code className="text-xs text-[var(--foreground)]">{t.name}</code>
+              <span className="text-[10px] text-[var(--muted)]">{t.description}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+const READ_TOOLS: ReadonlyArray<{ readonly name: string; readonly description: string }> = [
+  { name: "get_project_backlog", description: "Proyecto, historias y tareas agrupadas" },
+  { name: "get_user_story_by_id", description: "Historia de usuario por ID con tareas" },
+  { name: "get_task_by_id", description: "Tarea por ID con contexto" },
+  { name: "search_tasks", description: "Buscar tareas por texto, estado o historia" },
+  { name: "get_project_detail", description: "Detalle completo del proyecto" },
+  { name: "list_project_members", description: "Miembros del proyecto con roles" },
+  { name: "list_task_comments", description: "Comentarios de una tarea" },
+  { name: "list_task_agent_notes", description: "Notas de agente de una tarea" },
+  { name: "get_project_activity", description: "Actividad reciente del proyecto" },
+];
+
+const WRITE_TOOLS: ReadonlyArray<{ readonly name: string; readonly description: string }> = [
+  { name: "update_task_status", description: "Actualizar estado Kanban de tarea" },
+  { name: "add_task_agent_note", description: "Registrar nota tecnica de agente" },
+  { name: "create_task_comment", description: "Agregar comentario a tarea" },
+  { name: "create_task", description: "Crear tarea en historia de usuario" },
+  { name: "create_user_story", description: "Crear historia de usuario" },
+  { name: "update_task_details", description: "Actualizar titulo/descripcion de tarea" },
+  { name: "assign_task", description: "Reasignar usuarios a tarea" },
+];
+
+const SKILL_TOOLS: ReadonlyArray<{ readonly name: string; readonly description: string }> = [
+  { name: "get_sprintroom_mcp_skill", description: "Devuelve skill oficial instalable" },
+];
 
 function buildOpenCodeConfig(origin: string): string {
   return `{
@@ -807,6 +981,46 @@ function formatDate(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function timeAgo(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "desconocido";
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "hace instantes";
+  if (mins < 60) return `hace ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `hace ${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `hace ${days}d`;
+  return formatDate(value);
+}
+
+function inferDescription(
+  action: string,
+  entityType: string,
+  entityId: string,
+): string {
+  const shortId = entityId.length > 8 ? `${entityId.slice(0, 8)}...` : entityId;
+  const friendly: Record<string, string> = {
+    "mcp.update_task_status": "Actualizo estado de tarea",
+    "mcp.add_task_agent_note": "Registro nota de agente",
+    "mcp.create_task_comment": "Agrego comentario a tarea",
+    "mcp.create_task": "Creo una tarea",
+    "mcp.create_user_story": "Creo una historia de usuario",
+    "mcp.update_task_details": "Actualizo detalles de tarea",
+    "mcp.assign_task": "Reasigno tarea",
+  };
+  const entityLabel: Record<string, string> = {
+    sprint_task: "tarea",
+    user_story: "historia",
+    task_comment: "comentario",
+    task_agent_note: "nota de agente",
+    project: "proyecto",
+  };
+  if (friendly[action] !== undefined) return friendly[action];
+  return `${action} (${entityLabel[entityType] ?? entityType} ${shortId})`;
 }
 
 function buildMcpPrompt({

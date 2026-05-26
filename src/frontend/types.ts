@@ -117,3 +117,11 @@ export interface McpProjectKeyCreated {
   rawKey: string;
   description: string;
 }
+
+export interface ProjectActivityEvent {
+  readonly id: string;
+  readonly action: string;
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly occurredOnUtc: string;
+}

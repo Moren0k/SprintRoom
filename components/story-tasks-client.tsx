@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type DragEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type DragEvent, type FormEvent } from "react";
 import { apiRequest, getErrorMessage } from "@/src/frontend/api-client";
 import type { ProjectDetail, TaskDetail, TaskSummary, UserStoryDetail } from "@/src/frontend/types";
 import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from "@/src/domain/enums/task-status";
+import { useTaskStatusRealtime } from "@/src/frontend/use-task-status-realtime";
+import type { TaskStatusChangedPayload } from "@/src/frontend/use-task-status-realtime";
 import {
   Button,
   Card,
@@ -42,6 +44,8 @@ export default function StoryTasksClient({
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>({});
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [taskAssigneeIds, setTaskAssigneeIds] = useState<string[]>([]);
@@ -70,6 +74,25 @@ export default function StoryTasksClient({
       cancelled = true;
     };
   }, [projectId, userStoryId]);
+
+  const { isConnected: rtConnected } = useTaskStatusRealtime(
+    projectId,
+    useCallback((payload: TaskStatusChangedPayload) => {
+      if (story !== null && payload.userStoryId !== story.userStoryId) return;
+      setTasks((current) =>
+        current.map((task) =>
+          task.sprintTaskId === payload.taskId
+            ? { ...task, status: payload.status, isCompleted: payload.isCompleted }
+            : task,
+        ),
+      );
+      setSelectedTask((current) =>
+        current !== null && current.sprintTaskId === payload.taskId
+          ? { ...current, status: payload.status, isCompleted: payload.isCompleted }
+          : current,
+      );
+    }, [story]),
+  );
 
   function applyBundle(bundle: StoryTasksBundle) {
     setProject(bundle.project);
@@ -178,21 +201,27 @@ export default function StoryTasksClient({
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", taskId);
     setDraggingTaskId(taskId);
+    setDragOverColumn(null);
   }
 
   function handleDragEnd() {
     setDraggingTaskId(null);
+    setDragOverColumn(null);
   }
 
-  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+  function handleDragOver(event: DragEvent<HTMLDivElement>, status: string) {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
+    if (dragOverColumn !== status) {
+      setDragOverColumn(status);
+    }
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>, status: string) {
     event.preventDefault();
     const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
     setDraggingTaskId(null);
+    setDragOverColumn(null);
     if (taskId !== null) void updateTaskStatus(taskId, status);
   }
 
@@ -216,6 +245,13 @@ export default function StoryTasksClient({
         ? current.filter((id) => id !== userId)
         : [...current, userId],
     );
+  }
+
+  function toggleColumn(status: string) {
+    setCollapsedColumns((prev) => ({
+      ...prev,
+      [status]: !prev[status],
+    }));
   }
 
   if (loading) return <LoadingBlock label="Cargando tablero de la historia..." />;
@@ -247,20 +283,55 @@ export default function StoryTasksClient({
       <ErrorBanner message={error} />
       <SuccessBanner message={notice} />
 
+      <div className="flex items-center justify-end gap-2">
+        <span
+          className={`inline-block h-2 w-2 rounded-full ${
+            rtConnected ? "bg-emerald-500" : "bg-amber-500"
+          }`}
+        />
+        <span className="text-[11px] text-[var(--muted)]">
+          {rtConnected ? "Realtime conectado" : "Realtime desconectado"}
+        </span>
+      </div>
+
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
-          <div className="grid gap-4 overflow-x-auto pb-2 lg:grid-cols-5">
+          <div className="flex gap-4 overflow-x-auto pb-4">
             {TASK_STATUS_ORDER.map((status) => {
               const columnTasks = tasks.filter((task) => task.status === status);
               return (
                 <div
                   key={status}
-                  onDragOver={handleDragOver}
+                  onDragOver={(event) => handleDragOver(event, status)}
                   onDrop={(event) => handleDrop(event, status)}
-                  className="min-h-80 rounded-2xl border border-[var(--hairline)] bg-[var(--glass)] p-3"
+                  className={`w-[280px] shrink-0 min-h-80 rounded-2xl border p-3 backdrop-blur-xl transition-all duration-200 ${
+                    draggingTaskId !== null && dragOverColumn === status
+                      ? "border-[var(--foreground)]/30 bg-[var(--foreground)]/[0.02] shadow-inner"
+                      : "border-[var(--hairline)] bg-[var(--glass)]"
+                  }`}
                 >
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <h2 className="text-sm font-semibold text-[var(--foreground)]">
+                    <button
+                      type="button"
+                      onClick={() => toggleColumn(status)}
+                      className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)] lg:hidden"
+                    >
+                      <svg
+                        className={`h-3 w-3 text-[var(--muted)] transition-transform duration-200 ${
+                          collapsedColumns[status] ? "-rotate-90" : ""
+                        }`}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                      {TASK_STATUS_LABELS[status]}
+                    </button>
+                    <h2 className="hidden text-sm font-semibold text-[var(--foreground)] lg:block">
                       {TASK_STATUS_LABELS[status]}
                     </h2>
                     <span className="rounded-full border border-[var(--hairline)] px-2 py-0.5 text-xs text-[var(--muted)]">
@@ -268,7 +339,7 @@ export default function StoryTasksClient({
                     </span>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className={`space-y-3 ${collapsedColumns[status] ? "hidden lg:block" : ""}`}>
                     {columnTasks.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-[var(--hairline)] bg-[var(--background)] p-4 text-center text-xs leading-5 text-[var(--muted)]">
                         Arrastra tareas aqui
@@ -284,7 +355,6 @@ export default function StoryTasksClient({
                           onDragEnd={handleDragEnd}
                           onOpen={openTask}
                           onDelete={setDeleteTask}
-                          onStatusChange={updateTaskStatus}
                         />
                       ))
                     )}
@@ -408,7 +478,6 @@ function TaskKanbanCard({
   onDragEnd,
   onOpen,
   onDelete,
-  onStatusChange,
 }: {
   readonly task: TaskSummary;
   readonly dragging: boolean;
@@ -417,34 +486,36 @@ function TaskKanbanCard({
   readonly onDragEnd: () => void;
   readonly onOpen: (taskId: string) => void;
   readonly onDelete: (task: TaskSummary) => void;
-  readonly onStatusChange: (taskId: string, status: string) => void;
 }) {
   return (
     <div
       draggable={!busy}
       onDragStart={(event) => onDragStart(event, task.sprintTaskId)}
       onDragEnd={onDragEnd}
-      className={`cursor-grab rounded-xl border border-[var(--hairline)] bg-[var(--background)] p-4 shadow-xs transition active:cursor-grabbing ${
-        dragging ? "opacity-50 ring-2 ring-[var(--foreground)]/20" : "hover:-translate-y-0.5 hover:bg-[var(--glass)]"
+      className={`rounded-xl transition-all duration-200 ${
+        dragging
+          ? "border-2 border-dashed border-[var(--hairline)] bg-[var(--foreground)]/5 p-4 min-h-[120px]"
+          : "cursor-grab border border-[var(--hairline)] bg-[var(--background)] p-4 shadow-xs hover:shadow-md hover:-translate-y-1 hover:border-[var(--foreground)]/20 hover:bg-[var(--glass)] active:cursor-grabbing"
       }`}
     >
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold leading-6 text-[var(--foreground)]">{task.title}</h3>
-        <p className="line-clamp-3 text-xs leading-5 text-[var(--muted)]">{task.description || "Sin descripcion."}</p>
-      </div>
-      <div className="mt-4 rounded-xl border border-[var(--hairline)] bg-[var(--glass)] p-3">
-        <StatusSelector
-          currentStatus={task.status}
-          disabled={busy}
-          onChange={(newStatus) => onStatusChange(task.sprintTaskId, newStatus)}
-        />
-      </div>
-      <p className="mt-3 text-xs text-[var(--muted)]">
-        {task.commentCount} comentarios · {task.assigneeIds.length} asignados
-      </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={() => onOpen(task.sprintTaskId)} disabled={busy}>Ver detalle</Button>
-        <Button variant="ghost" onClick={() => onDelete(task)} disabled={busy}>Eliminar</Button>
+      <div className={dragging ? "invisible" : ""}>
+        <div className="space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-sm font-semibold leading-6 text-[var(--foreground)]">{task.title}</h3>
+            <StatusPill status={task.status} />
+          </div>
+          <p className="line-clamp-3 text-xs leading-5 text-[var(--muted)]">{task.description || "Sin descripcion."}</p>
+        </div>
+        <p className="mt-3 text-xs text-[var(--muted)]">
+          {task.commentCount} comentarios
+        </p>
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <AvatarGroup assigneeIds={task.assigneeIds} />
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => onOpen(task.sprintTaskId)} disabled={busy}>Ver detalle</Button>
+            <Button variant="ghost" onClick={() => onDelete(task)} disabled={busy}>Eliminar</Button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -499,4 +570,38 @@ function formatDate(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+const AVATAR_CLASSES = [
+  "z-30 bg-[var(--foreground)]/10 text-[var(--foreground)]/50",
+  "z-20 bg-[var(--foreground)]/15 text-[var(--foreground)]/60",
+  "z-10 bg-[var(--foreground)]/20 text-[var(--foreground)]/70",
+];
+
+function AvatarGroup({ assigneeIds }: { readonly assigneeIds: string[] }) {
+  if (assigneeIds.length === 0) {
+    return <span className="text-[10px] text-[var(--muted)]">Sin asignar</span>;
+  }
+
+  const maxVisible = 3;
+  const visible = assigneeIds.slice(0, maxVisible);
+  const remaining = assigneeIds.length - maxVisible;
+
+  return (
+    <div className="flex items-center">
+      <div className="flex -space-x-1.5">
+        {visible.map((id, i) => (
+          <div
+            key={id}
+            className={`flex h-6 w-6 items-center justify-center rounded-full border-2 border-[var(--background)] text-[9px] font-medium ${AVATAR_CLASSES[i] ?? AVATAR_CLASSES[0]}`}
+          >
+            {id.charAt(0).toUpperCase()}
+          </div>
+        ))}
+      </div>
+      {remaining > 0 && (
+        <span className="ml-1 text-[10px] font-medium text-[var(--muted)]">+{remaining}</span>
+      )}
+    </div>
+  );
 }

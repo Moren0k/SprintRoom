@@ -24,6 +24,11 @@ import {
   ListTaskAgentNotesHandler,
   GetProjectActivityHandler,
 } from "@/src/application/features/mcp-read";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/src/server/rate-limit";
 
 /**
  * Endpoint MCP para integracion con agentes de IA.
@@ -48,6 +53,16 @@ import {
 const MCP_VERSION = "mcp-sprintroom-1.0";
 
 export async function POST(request: Request): Promise<Response> {
+  // 0. Rate limit by PROJECT_KEY or client IP before doing any work
+  {
+    const projectKey = request.headers.get("X-Project-Key")?.trim() ?? "";
+    const identifier = projectKey.length > 0 ? projectKey : getClientIp(request);
+    const rl = checkRateLimit("mcp", identifier);
+    if (!rl.allowed) {
+      return rateLimitResponse(rl.resetMs);
+    }
+  }
+
   // 1. Parse body first to detect protocol
   const body = await request.json().catch(() => null);
   const isJsonRpc = body !== null && typeof body === "object" && !Array.isArray(body) && body.jsonrpc === "2.0";

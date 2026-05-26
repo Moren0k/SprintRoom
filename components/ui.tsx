@@ -260,11 +260,11 @@ export function Pill({ children, className = "" }: { readonly children: ReactNod
 }
 
 export const STATUS_PILL_COLORS: Record<string, string> = {
-  not_started: "border-yellow-200 bg-yellow-50 text-yellow-700 dark:border-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300",
-  in_progress: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300",
-  testing: "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-900/20 dark:text-purple-300",
-  review: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-900/20 dark:text-orange-300",
-  completed: "border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300",
+  not_started: "border-[var(--foreground)]/20 bg-[var(--foreground)]/5 text-[var(--foreground)]/60",
+  in_progress: "border-[var(--foreground)]/25 bg-[var(--foreground)]/8 text-[var(--foreground)]/70",
+  testing: "border-[var(--foreground)]/30 bg-[var(--foreground)]/10 text-[var(--foreground)]/70",
+  review: "border-[var(--foreground)]/35 bg-[var(--foreground)]/12 text-[var(--foreground)]/80",
+  completed: "border-[var(--foreground)]/40 bg-[var(--foreground)]/15 text-[var(--foreground)]/90",
 };
 
 const STATUS_LABELS: Record<string, string> = {

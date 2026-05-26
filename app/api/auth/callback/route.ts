@@ -6,8 +6,19 @@ import { UserId } from "@/src/domain/ids/user-id";
 import { User } from "@/src/domain/aggregates/user";
 import { EmailAddress } from "@/src/domain/value-objects/email-address";
 import { PersonName } from "@/src/domain/value-objects/person-name";
+import {
+  checkRateLimit,
+  getClientIp,
+} from "@/src/server/rate-limit";
 
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request);
+  const ipLimit = checkRateLimit("callback", ip);
+  if (!ipLimit.allowed) {
+    return NextResponse.redirect(
+      new URL("/login?error=rate_limited", request.url),
+    );
+  }
   const params = request.nextUrl.searchParams;
   const code = params.get("insforge_code");
   const errorParam = params.get("error");

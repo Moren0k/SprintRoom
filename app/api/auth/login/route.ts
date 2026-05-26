@@ -7,12 +7,24 @@ import { PersonName } from "@/src/domain/value-objects/person-name";
 import { ApplicationError } from "@/src/application";
 import { handleRouteError, ok, readJsonObject } from "@/src/server/http";
 import { requireString } from "@/src/server/validation";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/src/server/rate-limit";
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const ip = getClientIp(request);
+    const ipLimit = checkRateLimit("auth", ip);
+    if (!ipLimit.allowed) return rateLimitResponse(ipLimit.resetMs);
+
     const body = await readJsonObject(request);
     const email = requireString(body, "email").trim();
     const password = requireString(body, "password");
+
+    const emailLimit = checkRateLimit("auth", email);
+    if (!emailLimit.allowed) return rateLimitResponse(emailLimit.resetMs);
 
     const insforge = createInsForgeServerClient();
     const { data, error } = await insforge.auth.signInWithPassword({ email, password });
