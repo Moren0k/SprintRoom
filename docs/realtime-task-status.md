@@ -37,12 +37,14 @@ Frontend → hook `useTaskStatusRealtime(projectId, callback)`:
 1. Obtiene el JWT via `GET /api/auth/token` (lee la cookie httpOnly del lado servidor)
 2. Crea un `InsForgeClient` del lado browser (`createClient` sin `isServerMode`)
 3. Llama `client.setAccessToken(token)` para que el SDK envie el JWT al WebSocket
-4. Conecta (`client.realtime.connect()`)
-5. Se suscribe al canal (`client.realtime.subscribe(channel)`)
-6. Escucha `task_status_changed`
-7. Valida payload con `isValidPayload()` (6 campos requeridos)
-8. Ejecuta callback solo si coincide el `userStoryId`
-9. Limpia al desmontar: `disconnect()`
+4. Reutiliza el cliente browser de InsForge.
+5. Conecta (`client.realtime.connect()`) solo si no esta conectado.
+6. Se suscribe al canal (`client.realtime.subscribe(channel)`).
+7. Escucha `task_status_changed`.
+8. Valida payload con `isValidPayload()` (6 campos requeridos).
+9. Ejecuta callback solo si coincide el `userStoryId`.
+10. Ante `disconnect` o `connect_error`, reintenta con backoff hasta 15 segundos.
+11. Limpia listeners y `unsubscribe(channel)` al desmontar.
 
 ## Seguridad
 
@@ -61,9 +63,12 @@ Frontend → hook `useTaskStatusRealtime(projectId, callback)`:
 
 - Solo cubre cambios de `status` en `sprint_tasks` (no comentarios, historias, activity feed)
 - El payload no incluye `title`, `description`, `assigneeIds` por seguridad y simplicidad
-- La reconexion automatica depende del SDK (`client.realtime.connect()`)
-- Si el SDK se desconecta, el badge cambia a "Realtime desconectado" pero no reconecta automaticamente
+- El hook tiene reconexion con backoff para recuperar desconexiones de WebSocket.
 - En serverless multi-instancia, cada instancia tiene su propia conexion WebSocket
+
+## Diagnostico MCP InsForge
+
+Se intento revisar metadata, esquema y logs reales con el MCP de InsForge, pero el backend configurado (`tw5cnd8i.us-east.insforge.app`) no resolvio DNS desde este entorno (`getaddrinfo ENOTFOUND`). La correccion aplicada se limita al lifecycle del cliente frontend y mantiene el trigger/policies existentes documentados en `migrations/20260526150000_task-status-realtime-trigger.sql`.
 
 ## Smoke test manual
 

@@ -7,6 +7,7 @@ import type {
   GetTaskByIdArgs,
   SearchTasksArgs,
   UpdateTaskStatusArgs,
+  BulkUpdateTasksArgs,
   AddTaskAgentNoteArgs,
   GetSprintroomMcpSkillArgs,
   GetProjectDetailArgs,
@@ -130,6 +131,37 @@ export const MCP_TOOL_DEFINITIONS: ReadonlyArray<McpToolDefinition> = [
         },
       },
       required: ["tool", "taskId", "status"],
+    },
+  },
+  {
+    name: "bulk_update_tasks",
+    description:
+      "Actualiza el estado de multiples tareas en una sola peticion. Devuelve exitos y fallos por tarea.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: {
+          type: "string",
+          const: "bulk_update_tasks",
+        },
+        updates: {
+          type: "array",
+          maxItems: 50,
+          items: {
+            type: "object",
+            properties: {
+              taskId: { type: "string", description: "UUID de la tarea a actualizar" },
+              status: {
+                type: "string",
+                enum: ["not_started", "in_progress", "testing", "review", "completed"],
+                description: "Nuevo estado de la tarea",
+              },
+            },
+            required: ["taskId", "status"],
+          },
+        },
+      },
+      required: ["tool", "updates"],
     },
   },
   {
@@ -405,6 +437,37 @@ export function parseToolArgs(body: Record<string, unknown>): McpToolArgument {
       return { tool, taskId, status } as UpdateTaskStatusArgs;
     }
 
+    case "bulk_update_tasks": {
+      const updates = body.updates;
+      if (!Array.isArray(updates) || updates.length === 0) {
+        throw new McpDispatchError("updates es obligatorio y debe ser un arreglo no vacio.");
+      }
+      if (updates.length > 50) {
+        throw new McpDispatchError("updates no puede exceder 50 tareas por peticion.");
+      }
+
+      return {
+        tool,
+        updates: updates.map((item, index) => {
+          if (item === null || typeof item !== "object" || Array.isArray(item)) {
+            throw new McpDispatchError(`updates[${index}] debe ser un objeto.`);
+          }
+          const update = item as Record<string, unknown>;
+          const taskId = update.taskId;
+          if (typeof taskId !== "string" || taskId.length === 0) {
+            throw new McpDispatchError(`updates[${index}].taskId es obligatorio.`);
+          }
+          const status = update.status;
+          if (!validTaskStatus(status)) {
+            throw new McpDispatchError(
+              `updates[${index}].status debe ser uno de: not_started, in_progress, testing, review, completed.`,
+            );
+          }
+          return { taskId, status };
+        }),
+      } as BulkUpdateTasksArgs;
+    }
+
     case "add_task_agent_note": {
       const taskId = body.taskId;
       if (typeof taskId !== "string" || taskId.length === 0) {
@@ -555,6 +618,10 @@ export function parseToolArgs(body: Record<string, unknown>): McpToolArgument {
     default:
       throw new McpDispatchError(`Herramienta no implementada: ${tool}`);
   }
+}
+
+function validTaskStatus(value: unknown): boolean {
+  return ["not_started", "in_progress", "testing", "review", "completed"].includes(value as string);
 }
 
 export class McpDispatchError extends Error {

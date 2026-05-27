@@ -69,6 +69,7 @@ export default function ProjectDetailClient({
   const [mcpDescription, setMcpDescription] = useState("Agente IA del proyecto");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [confirmationName, setConfirmationName] = useState("");
+  const [destructiveConfirmation, setDestructiveConfirmation] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -245,7 +246,12 @@ export default function ProjectDetailClient({
     await runMutation("Elemento eliminado.", async () => {
       await apiRequest<void>(deleteTarget.endpoint, {
         method: "DELETE",
-        body: JSON.stringify({ confirmationName: confirmationName.trim() }),
+        body: JSON.stringify({
+          confirmationName: confirmationName.trim(),
+          ...(deleteTarget.kind === "project" || deleteTarget.kind === "story"
+            ? { destructiveConfirmation: destructiveConfirmation.trim() }
+            : {}),
+        }),
       });
       if (deleteTarget.kind === "project") {
         router.replace("/projects");
@@ -253,6 +259,7 @@ export default function ProjectDetailClient({
       }
       setDeleteTarget(null);
       setConfirmationName("");
+      setDestructiveConfirmation("");
       await reload();
     });
   }
@@ -510,11 +517,38 @@ export default function ProjectDetailClient({
             <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
               Escribe exactamente <span className="font-semibold text-[var(--foreground)]">{deleteTarget.name}</span> para confirmar.
             </p>
+            {(deleteTarget.kind === "project" || deleteTarget.kind === "story") && (
+              <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm leading-6 text-[var(--muted)]">
+                Esta accion elimina tambien todas las historias y tareas relacionadas. Para la segunda confirmacion escribe exactamente <span className="font-semibold text-[var(--foreground)]">ELIMINAR TODO</span>.
+              </p>
+            )}
             <form onSubmit={confirmDelete} className="mt-5 space-y-4">
-              <TextInput value={confirmationName} onChange={(event) => setConfirmationName(event.target.value)} />
+              <Field label="Nombre exacto">
+                <TextInput value={confirmationName} onChange={(event) => setConfirmationName(event.target.value)} />
+              </Field>
+              {(deleteTarget.kind === "project" || deleteTarget.kind === "story") && (
+                <Field label="Segunda confirmacion">
+                  <TextInput
+                    value={destructiveConfirmation}
+                    onChange={(event) => setDestructiveConfirmation(event.target.value)}
+                  />
+                </Field>
+              )}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
-                <Button type="submit" variant="danger" disabled={busy || confirmationName !== deleteTarget.name}>Eliminar</Button>
+                <Button type="button" variant="ghost" onClick={() => {
+                  setDeleteTarget(null);
+                  setConfirmationName("");
+                  setDestructiveConfirmation("");
+                }}>Cancelar</Button>
+                <Button
+                  type="submit"
+                  variant="danger"
+                  disabled={
+                    busy ||
+                    confirmationName !== deleteTarget.name ||
+                    ((deleteTarget.kind === "project" || deleteTarget.kind === "story") && destructiveConfirmation !== "ELIMINAR TODO")
+                  }
+                >Eliminar</Button>
               </div>
             </form>
           </Card>
@@ -758,23 +792,20 @@ function McpIntegrationCard({
 
       <details className="group mt-6">
         <summary className="cursor-pointer text-sm font-medium text-[var(--foreground)] hover:opacity-80">
-          Herramientas disponibles (17)
+          Herramientas disponibles (18)
         </summary>
         <div className="mt-4 space-y-4">
           <ToolGroup
-            icon="📖"
             label="Lectura"
             count={9}
             tools={READ_TOOLS}
           />
           <ToolGroup
-            icon="✏️"
             label="Escritura no destructiva"
-            count={7}
+            count={8}
             tools={WRITE_TOOLS}
           />
           <ToolGroup
-            icon="⚙️"
             label="Skill / setup"
             count={1}
             tools={SKILL_TOOLS}
@@ -813,12 +844,10 @@ function CopyButton({ value, label }: { readonly value: string; readonly label: 
 }
 
 function ToolGroup({
-  icon,
   label,
   count,
   tools,
 }: {
-  readonly icon: string;
   readonly label: string;
   readonly count: number;
   readonly tools: ReadonlyArray<{ readonly name: string; readonly description: string }>;
@@ -832,7 +861,7 @@ function ToolGroup({
         className="flex w-full items-center justify-between text-left"
       >
         <span className="text-xs font-semibold text-[var(--foreground)]">
-          {icon} {label} ({count})
+          {label} ({count})
         </span>
         <span className="text-[10px] text-[var(--muted)]">{open ? "ocultar" : "ver"}</span>
       </button>
@@ -864,6 +893,7 @@ const READ_TOOLS: ReadonlyArray<{ readonly name: string; readonly description: s
 
 const WRITE_TOOLS: ReadonlyArray<{ readonly name: string; readonly description: string }> = [
   { name: "update_task_status", description: "Actualizar estado Kanban de tarea" },
+  { name: "bulk_update_tasks", description: "Actualizar estado de multiples tareas" },
   { name: "add_task_agent_note", description: "Registrar nota tecnica de agente" },
   { name: "create_task_comment", description: "Agregar comentario a tarea" },
   { name: "create_task", description: "Crear tarea en historia de usuario" },
@@ -1005,6 +1035,7 @@ function inferDescription(
   const shortId = entityId.length > 8 ? `${entityId.slice(0, 8)}...` : entityId;
   const friendly: Record<string, string> = {
     "mcp.update_task_status": "Actualizo estado de tarea",
+    "mcp.bulk_update_tasks": "Actualizo tareas en bloque",
     "mcp.add_task_agent_note": "Registro nota de agente",
     "mcp.create_task_comment": "Agrego comentario a tarea",
     "mcp.create_task": "Creo una tarea",
@@ -1034,36 +1065,33 @@ function buildMcpPrompt({
 
   return `You are working on SprintRoom for project "${projectName}".
 
-Configure the MCP:
+Target environment: OpenCode.
+
+Configure SprintRoom MCP locally for the current repository only.
 
 Command: npx -y @sprintroom/mcp
 Environment:
   SPRINTROOM_API_URL: ${origin}
   SPRINTROOM_PROJECT_KEY: ${projectKey === undefined ? "<pega-aqui-la-project-key>" : projectKey}
 
-First, call get_sprintroom_mcp_skill to get the SprintRoom MCP skill.
-
-Use the response as the source of truth. Create or update:
-
-.sprintroom/sprintroom-mcp/README.md
-.sprintroom/sprintroom-mcp/SKILL.md
-
-If the repo already uses .agents/ or .skills/, install sprintroom-mcp there instead.
-
-Create or update AGENTS.md or AGENTES.md with this rule:
-
-"Before using SprintRoom MCP, every agent must read the sprintroom-mcp skill. The skill is the source of truth for tools, parameters, outputs, errors, and best practices. Do not invent tools, arguments, endpoints, states, commands, or behavior. If the MCP changes, update the skill in the same change."
-
 Rules:
-Use SKILL.md as the source of truth.
+- Do not install anything globally.
+- Do not write to system folders or user-global config folders.
+- Validate the repository structure before writing files.
+- Use only relative paths inside this repository.
+- Configure MCP in the local OpenCode project config if needed.
+- Call get_sprintroom_mcp_skill, then create or update .agents/skills/sprintroom-mcp/SKILL.md with the returned skill content.
+- Do not create AGENTS.md inside .sprintroom.
+- If AGENTS.md exists at repo root, update it idempotently to reference .agents/skills/sprintroom-mcp and when to use it.
+- If repo-root AGENTS.md does not exist, do not create it.
+- Use SKILL.md as the source of truth.
 Do not invent tools, parameters, states, commands, endpoints, or behavior.
 SprintRoom has no CLI, so do not create CLI instructions.
-Follow the project's existing structure.
 
 Finish by confirming:
-MCP configured.
-Skill installed.
-AGENTS.md or AGENTES.md updated.`;
+MCP local configuration path.
+Skill path: .agents/skills/sprintroom-mcp/SKILL.md.
+Whether repo-root AGENTS.md was updated or did not exist.`;
 }
 
 async function copyText(value: string) {

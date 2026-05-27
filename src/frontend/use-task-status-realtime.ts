@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@insforge/sdk";
+import { getBrowserInsForgeClient } from "./insforge-client";
 
 export interface TaskStatusChangedPayload {
   readonly projectId: string;
@@ -41,75 +41,107 @@ export function useTaskStatusRealtime(
   useEffect(() => {
     let cancelled = false;
     const channel = `project:${projectId}:tasks`;
+    let retryTimer: number | null = null;
+    let retryDelayMs = 1000;
 
-    async function connect(): Promise<ReturnType<typeof createClient> | null> {
+    const client = getBrowserInsForgeClient();
+
+    function scheduleReconnect() {
+      if (cancelled || retryTimer !== null) return;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        void connect();
+      }, retryDelayMs);
+      retryDelayMs = Math.min(retryDelayMs * 2, 15000);
+    }
+
+    async function connect(): Promise<void> {
       try {
         const tokenRes = await fetch("/api/auth/token");
-        if (!tokenRes.ok || cancelled) return null;
+        if (!tokenRes.ok || cancelled) {
+          scheduleReconnect();
+          return;
+        }
         const body = (await tokenRes.json()) as {
           data?: { accessToken?: string };
         };
         const token = body.data?.accessToken;
-        if (!token || cancelled) return null;
-
-        const baseUrl = process.env.NEXT_PUBLIC_INSFORGE_URL ?? "";
-        const anonKey = process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? "";
-        const client = createClient({ baseUrl, anonKey });
+        if (!token || cancelled) {
+          scheduleReconnect();
+          return;
+        }
 
         client.setAccessToken(token);
-        await client.realtime.connect();
+        if (!client.realtime.isConnected) {
+          await client.realtime.connect();
+        }
         if (cancelled) {
-          client.realtime.disconnect();
-          return null;
+          return;
         }
 
         const subResult = await client.realtime.subscribe(channel);
         if (!subResult.ok) {
           if (!cancelled) setIsConnected(false);
-          client.realtime.disconnect();
-          return null;
+          scheduleReconnect();
+          return;
         }
 
-        if (!cancelled) setIsConnected(true);
-
-        const onDisconnect = () => {
-          if (!cancelled) setIsConnected(false);
-        };
-        const onConnectError = () => {
-          if (!cancelled) setIsConnected(false);
-        };
-
-        client.realtime.on("disconnect", onDisconnect);
-        client.realtime.on("connect_error", onConnectError);
-
-        client.realtime.on("task_status_changed", (raw: unknown) => {
-          const payload =
-            typeof raw === "object" && raw !== null
-              ? (raw as Record<string, unknown>).payload ?? raw
-              : raw;
-          if (isValidPayload(payload)) {
-            callbackRef.current(payload);
-          }
-        });
-
-        return client;
+        if (!cancelled) {
+          retryDelayMs = 1000;
+          setIsConnected(true);
+        }
       } catch {
-        if (!cancelled) setIsConnected(false);
-        return null;
+        if (!cancelled) {
+          setIsConnected(false);
+          scheduleReconnect();
+        }
       }
     }
 
-    let client: ReturnType<typeof createClient> | null = null;
+    const onDisconnect = () => {
+      if (!cancelled) {
+        setIsConnected(false);
+        scheduleReconnect();
+      }
+    };
+    const onConnect = () => {
+      if (!cancelled) {
+        setIsConnected(true);
+      }
+    };
+    const onConnectError = () => {
+      if (!cancelled) {
+        setIsConnected(false);
+        scheduleReconnect();
+      }
+    };
+    const onTaskStatusChanged = (raw: unknown) => {
+      const payload =
+        typeof raw === "object" && raw !== null
+          ? (raw as Record<string, unknown>).payload ?? raw
+          : raw;
+      if (isValidPayload(payload)) {
+        callbackRef.current(payload);
+      }
+    };
 
-    void connect().then((c) => {
-      client = c;
-    });
+    client.realtime.on("connect", onConnect);
+    client.realtime.on("disconnect", onDisconnect);
+    client.realtime.on("connect_error", onConnectError);
+    client.realtime.on("task_status_changed", onTaskStatusChanged);
+
+    void connect();
 
     return () => {
       cancelled = true;
-      if (client !== null) {
-        client.realtime.disconnect();
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
       }
+      client.realtime.off("connect", onConnect);
+      client.realtime.off("disconnect", onDisconnect);
+      client.realtime.off("connect_error", onConnectError);
+      client.realtime.off("task_status_changed", onTaskStatusChanged);
+      void client.realtime.unsubscribe(channel);
     };
   }, [projectId]);
 

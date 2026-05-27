@@ -1,7 +1,6 @@
 import type { InsForgeDatabaseGateway } from "../insforge/database-gateway";
 import type {
   ProjectRow,
-  ProjectMemberRow,
   UserStoryRow,
   SprintTaskRow,
   SprintTaskAssignmentRow,
@@ -14,6 +13,7 @@ import type {
   GetTaskByIdArgs,
   SearchTasksArgs,
   UpdateTaskStatusArgs,
+  BulkUpdateTasksArgs,
   AddTaskAgentNoteArgs,
   GetSprintroomMcpSkillArgs,
   GetProjectDetailArgs,
@@ -32,6 +32,7 @@ import type {
   McpTaskDetail,
   McpTaskSearchResult,
   McpStatusUpdateResult,
+  McpBulkUpdateTasksResult,
   McpNoteAddResult,
   McpSkillPackage,
   McpTask,
@@ -53,6 +54,7 @@ import type { InsForgeAuditLogger } from "../audit/audit-logger";
 import type {
   McpGetSprintTaskDetailHandler,
   McpUpdateTaskStatusHandler,
+  McpBulkUpdateTasksHandler,
   AddTaskAgentNoteHandler,
 } from "../../application/features/tasks";
 import type {
@@ -70,6 +72,7 @@ import type {
   McpAssignTaskHandler,
 } from "../../application/features/mcp-write";
 import { ApplicationError } from "../../application/abstractions/application-error";
+import { getTaskStatusProgress } from "../../domain/enums/task-status";
 
 export class McpServiceError extends Error {
   constructor(
@@ -93,6 +96,7 @@ export class McpService {
     private readonly projectKeyId: string,
     private readonly taskDetailHandler: McpGetSprintTaskDetailHandler,
     private readonly updateTaskStatusHandler: McpUpdateTaskStatusHandler,
+    private readonly bulkUpdateTasksHandler: McpBulkUpdateTasksHandler,
     private readonly addTaskAgentNoteHandler: AddTaskAgentNoteHandler,
     private readonly getProjectDetailHandler: GetProjectDetailHandler,
     private readonly listProjectMembersHandler: ListProjectMembersHandler,
@@ -123,8 +127,7 @@ export class McpService {
     for (const story of stories) {
       const storyTasks = allTasks.filter((t) => t.user_story_id === story.id);
       const tasks = await this.enrichTasks(storyTasks, projectId);
-      const completed = storyTasks.filter((t) => t.status === "completed").length;
-      const progress = storyTasks.length === 0 ? 0 : Math.round((completed * 100) / storyTasks.length);
+      const progress = this.calculateTaskRowsProgress(storyTasks);
 
       userStories.push({
         id: story.id,
@@ -171,8 +174,7 @@ export class McpService {
       orderBy: { column: "created_on_utc", ascending: true },
     });
     const tasks = await this.enrichTasks(taskRows, projectId);
-    const completed = taskRows.filter((t) => t.status === "completed").length;
-    const progress = taskRows.length === 0 ? 0 : Math.round((completed * 100) / taskRows.length);
+    const progress = this.calculateTaskRowsProgress(taskRows);
 
     return {
       id: story.id,
@@ -203,6 +205,14 @@ export class McpService {
     const project = await this.database.selectOne<ProjectRow>("projects", [
       { operator: "eq", column: "id", value: projectId },
     ]);
+    const storyTasks = story === null
+      ? []
+      : await this.database.selectRows<SprintTaskRow>("sprint_tasks", {
+          filters: [
+            { operator: "eq", column: "user_story_id", value: story.id },
+            { operator: "eq", column: "project_id", value: projectId },
+          ],
+        });
 
     const enriched = await this.enrichTasks(
       [{
@@ -233,7 +243,7 @@ export class McpService {
         id: story?.id ?? "",
         title: story?.title ?? "Historia no disponible",
         description: story?.description ?? "",
-        progress: 0,
+        progress: this.calculateTaskRowsProgress(storyTasks),
       },
       project: {
         id: projectId,
@@ -335,6 +345,32 @@ export class McpService {
         ? new McpServiceError("service_error", error.message)
         : error;
     }
+  }
+
+  /* ===================== bulk_update_tasks ==================== */
+
+  async bulkUpdateTasks(
+    projectId: string,
+    args: BulkUpdateTasksArgs,
+  ): Promise<McpBulkUpdateTasksResult> {
+    const sanitizedArgs = this.sanitizeArgs(args as unknown as Record<string, unknown>);
+    const result = await this.bulkUpdateTasksHandler.handle({
+      projectId,
+      updates: args.updates,
+    });
+
+    await this.recordAuditEvent({
+      projectId,
+      tool: "bulk_update_tasks",
+      entityType: "sprint_task",
+      entityId: "00000000-0000-0000-0000-000000000000",
+      args: sanitizedArgs,
+      result: result.failedTasks.length === args.updates.length ? "error" : "success",
+      error: result.failedTasks.length > 0 ? `${result.failedTasks.length} tarea(s) fallaron.` : undefined,
+      details: { summary: result.summary },
+    });
+
+    return result as McpBulkUpdateTasksResult;
   }
 
   /* ===================== add_task_agent_note ================== */
@@ -904,7 +940,15 @@ export class McpService {
     tasks: SprintTaskRow[],
   ): number {
     if (storyCount === 0 || tasks.length === 0) return 0;
-    const completed = tasks.filter((t) => t.status === "completed").length;
-    return Math.round((completed * 100) / tasks.length);
+    return this.calculateTaskRowsProgress(tasks);
+  }
+
+  private calculateTaskRowsProgress(tasks: SprintTaskRow[]): number {
+    if (tasks.length === 0) return 0;
+    const total = tasks.reduce(
+      (sum, task) => sum + getTaskStatusProgress(task.status as McpTaskStatus),
+      0,
+    );
+    return Math.round(total / tasks.length);
   }
 }

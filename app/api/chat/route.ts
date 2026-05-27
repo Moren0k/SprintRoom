@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     const completion = await openai.chat.completions.create({
-      model: "openai/gpt-4o-mini",
+      model: "deepseek/deepseek-v4-flash:free",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: message },

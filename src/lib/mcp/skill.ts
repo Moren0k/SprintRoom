@@ -1,62 +1,10 @@
 import type { McpSkillPackage } from "./types";
 
-export const SPRINTROOM_MCP_SKILL_VERSION = "1.1.0";
+export const SPRINTROOM_MCP_SKILL_VERSION = "1.2.0";
 export const SPRINTROOM_MCP_SKILL_LAST_UPDATED = "2026-05-26";
 
 export const SPRINTROOM_MCP_AGENTS_INSTRUCTION =
-  "Skill del MCP de SprintRoom: antes de usar el MCP de SprintRoom, todo agente debe leer la skill ubicada en [ruta-detectada]/sprintroom-mcp/. Esta skill documenta herramientas reales, parametros, salidas, casos de uso, errores comunes y buenas practicas. No se deben inventar herramientas, argumentos, endpoints, estados ni comportamientos no documentados. SprintRoom todavia no tiene CLI; no documentes comandos CLI inexistentes. Si el MCP cambia, esta skill debe actualizarse en el mismo cambio.";
-
-const README_CONTENT = `# sprintroom-mcp
-
-Skill oficial del MCP de SprintRoom para agentes de IA.
-
-Esta carpeta es la fuente oficial de la documentacion que debe instalarse en los proyectos de usuarios cuando copian el prompt de instalacion del MCP desde SprintRoom.
-
-## Archivo principal
-
-Lee \`SKILL.md\` antes de usar cualquier herramienta del MCP de SprintRoom.
-
-## Instalacion o actualizacion de esta skill
-
-Para instalar o actualizar esta skill en un proyecto, primero instala/configura el MCP de SprintRoom. Luego llama la herramienta \`get_sprintroom_mcp_skill\` y crea o actualiza los archivos que devuelva la respuesta en la carpeta de skills correspondiente.
-
-Prioridad de instalacion:
-
-1. \`.agentes/\`
-2. \`.skills/\`
-3. \`.sprintroom/\`
-
-Dentro de la carpeta elegida, crea o actualiza \`sprintroom-mcp/README.md\` y \`sprintroom-mcp/SKILL.md\`.
-
-## MCP documentado
-
-- Endpoint: \`/api/mcp\`
-- Header requerido: \`X-Project-Key\`
-- Protocolos soportados: HTTP simple y JSON-RPC 2.0
-- Fuente de verdad del codigo: \`app/api/mcp/route.ts\`, \`src/lib/mcp/tools.ts\`, \`src/lib/mcp/types.ts\`, \`src/lib/mcp/service.ts\`, \`src/lib/mcp/auth.ts\`
-
-## Herramientas reales
-
-- \`get_project_backlog\`
-- \`get_user_story_by_id\`
-- \`get_task_by_id\`
-- \`search_tasks\`
-- \`get_project_detail\`
-- \`list_project_members\`
-- \`list_task_comments\`
-- \`list_task_agent_notes\`
-- \`get_project_activity\`
-- \`update_task_status\`
-- \`add_task_agent_note\`
-- \`get_sprintroom_mcp_skill\`
-- \`create_task_comment\`
-- \`create_task\`
-- \`create_user_story\`
-- \`update_task_details\`
-- \`assign_task\`
-
-No documentes ni uses herramientas que no existan en el codigo real del MCP. Si el MCP cambia, actualiza esta skill y la respuesta de \`get_sprintroom_mcp_skill\` en el mismo cambio.
-`;
+  "Skill del MCP de SprintRoom: antes de usar el MCP de SprintRoom, todo agente debe leer `.agents/skills/sprintroom-mcp/SKILL.md`. Usala para operar SprintRoom MCP, consultar instrucciones, entender tools disponibles y ejecutar flujos de SprintRoom. La skill documenta herramientas reales, parametros, salidas, casos de uso, errores comunes y buenas practicas. No inventes herramientas, argumentos, endpoints, estados ni comportamientos no documentados.";
 
 const SKILL_CONTENT = `---
 name: sprintroom-mcp
@@ -81,9 +29,9 @@ Para instalar o actualizar esta skill en un proyecto:
 
 1. Instala/configura el MCP de SprintRoom con el endpoint y PROJECT_KEY del proyecto.
 2. Llama la herramienta \`get_sprintroom_mcp_skill\`.
-3. Elige carpeta de instalacion con esta prioridad: \`.agentes/\`, luego \`.skills/\`, luego crea \`.sprintroom/\`.
-4. Dentro de la carpeta elegida, crea o actualiza \`sprintroom-mcp/README.md\` y \`sprintroom-mcp/SKILL.md\` usando \`files[].content\` de la respuesta.
-5. Actualiza \`AGENTS.md\` o \`AGENTES.md\` con \`agentsInstruction\`.
+3. Crea si hace falta \`.agents/skills/sprintroom-mcp/\` dentro del repo actual.
+4. Crea o actualiza \`.agents/skills/sprintroom-mcp/SKILL.md\` usando \`files[].content\`.
+5. Si existe \`AGENTS.md\` en la raiz, agrega \`agentsInstruction\` de forma idempotente. Si no existe, no lo crees.
 6. Lee la skill instalada antes de usar cualquier otra herramienta del MCP.
 
 La herramienta \`get_sprintroom_mcp_skill\` no escribe archivos. Solo devuelve el paquete instalable para que el agente lo cree o actualice localmente.
@@ -100,6 +48,7 @@ La herramienta \`get_sprintroom_mcp_skill\` no escribe archivos. Solo devuelve e
 - Para leer notas de agente de una tarea.
 - Para consultar actividad reciente de un proyecto.
 - Para mover una tarea entre estados Kanban cuando hay instruccion o evidencia suficiente.
+- Para actualizar el estado de varias tareas con una sola llamada.
 - Para registrar una nota tecnica del agente en una tarea.
 
 ## Cuando no usarlo
@@ -153,6 +102,7 @@ No uses \`todo\`, \`done\` ni \`blocked\`; no existen como estados validos en el
 - \`list_task_agent_notes\`
 - \`get_project_activity\`
 - \`update_task_status\`
+- \`bulk_update_tasks\`
 - \`add_task_agent_note\`
 - \`get_sprintroom_mcp_skill\`
 - \`create_task_comment\`
@@ -193,6 +143,7 @@ Si el usuario pide una capacidad no disponible, dilo claramente y no inventes un
 - Necesitas cambiar titulo o descripcion de una tarea: usa \`update_task_details\`.
 - Necesitas reemplazar los usuarios asignados a una tarea: usa \`assign_task\`.
 - Necesitas mover una tarea a otro estado: valida primero y usa \`update_task_status\`.
+- Necesitas mover varias tareas a estados definidos: valida primero y usa \`bulk_update_tasks\`.
 - Terminaste trabajo o debes dejar trazabilidad tecnica: usa \`add_task_agent_note\`.
 
 ## Herramienta: get_sprintroom_mcp_skill
@@ -209,9 +160,9 @@ Salida:
 - \`version\`: version de la skill.
 - \`description\`: descripcion breve.
 - \`recommendedInstallDir\`: \`sprintroom-mcp\`.
-- \`installDirPriority\`: \`.agentes/\`, \`.skills/\`, \`.sprintroom/\`.
+- \`installDirPriority\`: \`.agents/skills/\`.
 - \`files[]\`: archivos a crear o actualizar, con \`path\` y \`content\`.
-- \`agentsInstruction\`: texto para AGENTS.md o AGENTES.md.
+- \`agentsInstruction\`: texto para AGENTS.md raiz si existe.
 - \`tools[]\`: resumen de herramientas reales.
 - \`lastUpdated\`: fecha de actualizacion.
 
@@ -312,6 +263,18 @@ Entrada HTTP simple:
 
 Esta herramienta escribe datos. Valida \`taskId\` antes de usarla.
 
+## Herramienta: bulk_update_tasks
+
+Actualiza el estado de multiples tareas en una sola peticion. Permite exito parcial: las tareas validas se actualizan y las fallidas se reportan con motivo.
+
+Entrada HTTP simple:
+
+    { "tool": "bulk_update_tasks", "updates": [{ "taskId": "uuid", "status": "in_progress" }, { "taskId": "uuid", "status": "review" }] }
+
+Restricciones: \`updates\` es obligatorio, no puede estar vacio y no puede exceder 50 tareas. Cada \`status\` debe ser uno de los estados validos.
+
+Salida: \`updatedTasks[]\`, \`failedTasks[]\`, \`summary\` con \`requested\`, \`updated\`, \`failed\`.
+
 ## Herramienta: add_task_agent_note
 
 Registra una nota tecnica de agente asociada a una tarea.
@@ -402,8 +365,8 @@ Salida: \`taskId\`, \`assigneeIds[]\`, \`status\`.
 Instalar o actualizar la skill:
 1. Configura MCP con endpoint y PROJECT_KEY.
 2. Llama \`get_sprintroom_mcp_skill\`.
-3. Crea o actualiza archivos en \`.agentes/\`, \`.skills/\` o \`.sprintroom/\`.
-4. Actualiza AGENTS.md o AGENTES.md.
+3. Crea o actualiza \`.agents/skills/sprintroom-mcp/SKILL.md\`.
+4. Si existe AGENTS.md raiz, agrega la referencia sin duplicarla.
 5. Lee la skill instalada antes de seguir.
 
 Explorar un proyecto:
@@ -462,9 +425,8 @@ export function getSprintroomMcpSkillPackage(): McpSkillPackage {
     description:
       "Skill oficial para agentes de IA que usan el MCP de SprintRoom.",
     recommendedInstallDir: "sprintroom-mcp",
-    installDirPriority: [".agentes/", ".skills/", ".sprintroom/"],
+    installDirPriority: [".agents/skills/"],
     files: [
-      { path: "README.md", content: README_CONTENT },
       { path: "SKILL.md", content: SKILL_CONTENT },
     ],
     agentsInstruction: SPRINTROOM_MCP_AGENTS_INSTRUCTION,
@@ -488,6 +450,10 @@ export function getSprintroomMcpSkillPackage(): McpSkillPackage {
       {
         name: "update_task_status",
         description: "Actualiza el estado de una tarea.",
+      },
+      {
+        name: "bulk_update_tasks",
+        description: "Actualiza el estado de multiples tareas en una sola peticion.",
       },
       {
         name: "add_task_agent_note",

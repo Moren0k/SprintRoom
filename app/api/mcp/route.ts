@@ -8,6 +8,7 @@ import { SystemClock } from "@/src/lib/system-clock";
 import {
   McpGetSprintTaskDetailHandler,
   McpUpdateTaskStatusHandler,
+  McpBulkUpdateTasksHandler,
   AddTaskAgentNoteHandler,
 } from "@/src/application/features/tasks";
 import {
@@ -93,6 +94,11 @@ export async function POST(request: Request): Promise<Response> {
       repositories.unitOfWork,
       clock,
     );
+    const bulkUpdateTasksHandler = new McpBulkUpdateTasksHandler(
+      repositories.sprintTasks,
+      repositories.unitOfWork,
+      clock,
+    );
     const addTaskAgentNoteHandler = new AddTaskAgentNoteHandler(
       repositories.sprintTasks,
       repositories.taskAgentNotes,
@@ -155,6 +161,7 @@ export async function POST(request: Request): Promise<Response> {
       keyId,
       taskDetailHandler,
       updateTaskStatusHandler,
+      bulkUpdateTasksHandler,
       addTaskAgentNoteHandler,
       getProjectDetailHandler,
       listProjectMembersHandler,
@@ -204,9 +211,17 @@ async function handleJsonRpc(
       ? (body.params as Record<string, unknown>)
       : {};
 
+  function negotiateProtocolVersion(requested: unknown): string {
+    if (typeof requested === "string") {
+      const v = requested.trim();
+      if (v && v !== "0.1.0") return v;
+    }
+    return "2024-11-05";
+  }
+
   if (method === "initialize") {
     return mcpResult(id, {
-      protocolVersion: "0.1.0",
+      protocolVersion: negotiateProtocolVersion(params.protocolVersion),
       capabilities: { tools: {} },
       serverInfo: { name: "sprintroom-mcp", version: MCP_VERSION },
     });
@@ -243,6 +258,8 @@ async function handleJsonRpc(
         result = await service.searchTasks(projectId, parsed);
       } else if (parsed.tool === "update_task_status") {
         result = await service.updateTaskStatus(projectId, parsed);
+      } else if (parsed.tool === "bulk_update_tasks") {
+        result = await service.bulkUpdateTasks(projectId, parsed);
       } else if (parsed.tool === "add_task_agent_note") {
         result = await service.addTaskAgentNote(projectId, parsed);
       } else if (parsed.tool === "get_sprintroom_mcp_skill") {
@@ -305,6 +322,8 @@ async function handleCustomHttp(
       result = await service.searchTasks(projectId, parsed);
     } else if (parsed.tool === "update_task_status") {
       result = await service.updateTaskStatus(projectId, parsed);
+    } else if (parsed.tool === "bulk_update_tasks") {
+      result = await service.bulkUpdateTasks(projectId, parsed);
     } else if (parsed.tool === "add_task_agent_note") {
       result = await service.addTaskAgentNote(projectId, parsed);
     } else if (parsed.tool === "get_sprintroom_mcp_skill") {

@@ -114,6 +114,18 @@ Obtiene todo el proyecto con sus historias y tareas.
 ```
 Estados válidos: `not_started`, `in_progress`, `testing`, `review`, `completed`
 
+### `bulk_update_tasks`
+```json
+{
+  "tool": "bulk_update_tasks",
+  "updates": [
+    { "taskId": "uuid", "status": "testing" },
+    { "taskId": "uuid", "status": "review" }
+  ]
+}
+```
+Devuelve `updatedTasks`, `failedTasks` y `summary`. Permite exito parcial.
+
 ### `add_task_agent_note`
 ```json
 {

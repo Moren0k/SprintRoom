@@ -102,10 +102,10 @@ function createDatabase(): FakeReadDatabaseGateway {
       { id: "s3", project_id: "p2", title: "Story 3", description: "", created_on_utc: "2026-05-23T09:00:00.000Z", updated_on_utc: "2026-05-23T09:00:00.000Z" },
     ],
     sprint_tasks: [
-      { id: "t1", project_id: "p1", user_story_id: "s1", title: "Done", description: "", is_completed: true, created_on_utc: "2026-05-23T10:00:00.000Z", updated_on_utc: "2026-05-23T10:00:00.000Z" },
-      { id: "t2", project_id: "p1", user_story_id: "s1", title: "Mine", description: "", is_completed: false, created_on_utc: "2026-05-23T10:00:00.000Z", updated_on_utc: "2026-05-23T10:00:00.000Z" },
-      { id: "t3", project_id: "p1", user_story_id: "s2", title: "Backlog", description: "", is_completed: false, created_on_utc: "2026-05-23T10:00:00.000Z", updated_on_utc: "2026-05-23T10:00:00.000Z" },
-      { id: "t4", project_id: "p2", user_story_id: "s3", title: "Hidden", description: "", is_completed: false, created_on_utc: "2026-05-23T09:00:00.000Z", updated_on_utc: "2026-05-23T09:00:00.000Z" },
+      { id: "t1", project_id: "p1", user_story_id: "s1", title: "Done", description: "", is_completed: true, status: "completed", created_on_utc: "2026-05-23T10:00:00.000Z", updated_on_utc: "2026-05-23T10:00:00.000Z" },
+      { id: "t2", project_id: "p1", user_story_id: "s1", title: "Mine", description: "", is_completed: false, status: "in_progress", created_on_utc: "2026-05-23T10:00:00.000Z", updated_on_utc: "2026-05-23T10:00:00.000Z" },
+      { id: "t3", project_id: "p1", user_story_id: "s2", title: "Backlog", description: "", is_completed: false, status: "not_started", created_on_utc: "2026-05-23T10:00:00.000Z", updated_on_utc: "2026-05-23T10:00:00.000Z" },
+      { id: "t4", project_id: "p2", user_story_id: "s3", title: "Hidden", description: "", is_completed: false, status: "not_started", created_on_utc: "2026-05-23T09:00:00.000Z", updated_on_utc: "2026-05-23T09:00:00.000Z" },
     ],
     sprint_task_assignments: [
       { task_id: "t1", user_id: "u2" },
@@ -138,7 +138,7 @@ describe("InsForgeDashboardReadModel", () => {
       memberCount: 2,
       userStoryCount: 2,
       taskCount: 3,
-      progress: 25,
+      progress: (100 + 40 + 0) / 3,
     });
     expect(dashboard.personalTasks).toMatchObject([
       { sprintTaskId: "t2", projectName: "Visible Project", commentCount: 1 },

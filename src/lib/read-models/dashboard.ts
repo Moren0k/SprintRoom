@@ -1,6 +1,7 @@
 import { ApplicationError } from "../../application/abstractions/application-error";
 import type { RequestContext } from "../../application/abstractions/request-context";
 import { SystemRole } from "../../domain/enums/system-role";
+import { getTaskStatusProgress, type TaskStatus } from "../../domain/enums/task-status";
 import type { ProjectRole } from "../../domain/enums/project-role";
 import type { InsForgeDatabaseGateway } from "../insforge/database-gateway";
 import type {
@@ -265,15 +266,17 @@ function calculateProjectProgress(
   stories: ReadonlyArray<UserStoryRow>,
   tasks: ReadonlyArray<SprintTaskRow>,
 ): number {
-  if (stories.length === 0) {
+  if (stories.length === 0 || tasks.length === 0) {
     return 0;
   }
-  const total = stories.reduce((sum, story) => {
-    const storyTasks = tasks.filter((task) => task.user_story_id === story.id);
-    if (storyTasks.length === 0) {
-      return sum;
-    }
-    return sum + (storyTasks.filter((task) => task.is_completed).length * 100) / storyTasks.length;
-  }, 0);
-  return total / stories.length;
+  const storyIds = new Set(stories.map((story) => story.id));
+  const projectTasks = tasks.filter((task) => storyIds.has(task.user_story_id));
+  if (projectTasks.length === 0) {
+    return 0;
+  }
+  const total = projectTasks.reduce(
+    (sum, task) => sum + getTaskStatusProgress(task.status as TaskStatus),
+    0,
+  );
+  return total / projectTasks.length;
 }

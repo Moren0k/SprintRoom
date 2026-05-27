@@ -449,6 +449,97 @@ export class McpUpdateTaskStatusHandler
   }
 }
 
+/* ===================== MCP: Cambiar estado de tareas en bloque ========= */
+
+export interface McpBulkUpdateTaskItemCommand {
+  readonly taskId: string;
+  readonly status: string;
+}
+
+export interface McpBulkUpdateTasksCommand {
+  readonly projectId: string;
+  readonly updates: ReadonlyArray<McpBulkUpdateTaskItemCommand>;
+}
+
+export interface McpBulkUpdateTaskSuccess {
+  readonly taskId: string;
+  readonly previousStatus: string;
+  readonly newStatus: string;
+}
+
+export interface McpBulkUpdateTaskFailure {
+  readonly taskId: string;
+  readonly reason: string;
+}
+
+export interface McpBulkUpdateTasksResult {
+  readonly updatedTasks: ReadonlyArray<McpBulkUpdateTaskSuccess>;
+  readonly failedTasks: ReadonlyArray<McpBulkUpdateTaskFailure>;
+  readonly summary: {
+    readonly requested: number;
+    readonly updated: number;
+    readonly failed: number;
+  };
+}
+
+export class McpBulkUpdateTasksHandler
+  implements CommandHandler<McpBulkUpdateTasksCommand, McpBulkUpdateTasksResult>
+{
+  constructor(
+    private readonly sprintTaskRepository: SprintTaskRepository,
+    private readonly unitOfWork: UnitOfWork,
+    private readonly clock: Clock,
+  ) {}
+
+  async handle(command: McpBulkUpdateTasksCommand): Promise<McpBulkUpdateTasksResult> {
+    const updatedTasks: McpBulkUpdateTaskSuccess[] = [];
+    const failedTasks: McpBulkUpdateTaskFailure[] = [];
+
+    for (const update of command.updates) {
+      try {
+        if (!Object.values(TaskStatus).includes(update.status as TaskStatus)) {
+          throw new ApplicationError(`Estado de tarea invalido: ${update.status}.`);
+        }
+
+        const task = await this.sprintTaskRepository.getById(
+          SprintTaskId.from(update.taskId),
+        );
+        if (task === null) {
+          throw new ApplicationError("La tarea no existe.");
+        }
+        if (task.projectId !== command.projectId) {
+          throw new ApplicationError("La tarea no pertenece a este proyecto.");
+        }
+
+        const previousStatus = task.status;
+        task.updateStatus(update.status as TaskStatus, this.clock.utcNow);
+        await this.unitOfWork.saveChanges();
+
+        updatedTasks.push({
+          taskId: update.taskId,
+          previousStatus,
+          newStatus: task.status,
+        });
+      } catch (error) {
+        failedTasks.push({
+          taskId: update.taskId,
+          reason: error instanceof Error ? error.message : "Error desconocido.",
+        });
+      }
+    }
+
+    return {
+      updatedTasks,
+      failedTasks,
+      summary: {
+        requested: command.updates.length,
+        updated: updatedTasks.length,
+        failed: failedTasks.length,
+      },
+    };
+  }
+}
+
 /* ===================== MCP: Agregar nota de agente ==================== */
 
 export interface AddTaskAgentNoteCommand {

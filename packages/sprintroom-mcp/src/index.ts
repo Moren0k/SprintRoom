@@ -4,7 +4,17 @@ import { createInterface } from "node:readline";
 
 const SERVER_NAME = "sprintroom-mcp";
 const SERVER_VERSION = "1.1.0";
-const PROTOCOL_VERSION = "0.1.0";
+
+// MCP clients expect a date-based protocol version (e.g. 2024-11-05).
+const DEFAULT_PROTOCOL_VERSION = "2024-11-05";
+
+function negotiateProtocolVersion(requested: unknown): string {
+  if (typeof requested === "string") {
+    const v = requested.trim();
+    if (v && v !== "0.1.0") return v;
+  }
+  return DEFAULT_PROTOCOL_VERSION;
+}
 
 function getEnv(name: string): string {
   return (process.env[name] ?? "").trim();
@@ -29,12 +39,12 @@ function toolErrorResult(message: string): Record<string, unknown> {
   return { content: [{ type: "text", text: message }], isError: true };
 }
 
-function handleInitialize(id: unknown): void {
+function handleInitialize(id: unknown, params: Record<string, unknown>): void {
   writeJson({
     jsonrpc: "2.0",
     id,
     result: {
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: negotiateProtocolVersion(params.protocolVersion),
       capabilities: { tools: {} },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
     },
@@ -181,7 +191,7 @@ async function handleLine(line: string): Promise<void> {
       : {};
 
   if (method === "initialize") {
-    handleInitialize(id);
+    handleInitialize(id, params);
   } else if (method === "ping") {
     handlePing(id);
   } else if (method === "tools/list") {

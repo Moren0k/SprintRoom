@@ -49,6 +49,7 @@ export default function StoryTasksClient({
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [taskAssigneeIds, setTaskAssigneeIds] = useState<string[]>([]);
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [commentBody, setCommentBody] = useState("");
   const [deleteTask, setDeleteTask] = useState<TaskSummary | null>(null);
   const [confirmationName, setConfirmationName] = useState("");
@@ -94,6 +95,15 @@ export default function StoryTasksClient({
     }, [story]),
   );
 
+  useEffect(() => {
+    if (!createTaskOpen) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setCreateTaskOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [createTaskOpen]);
+
   function applyBundle(bundle: StoryTasksBundle) {
     setProject(bundle.project);
     setStory(bundle.story);
@@ -123,6 +133,7 @@ export default function StoryTasksClient({
       setTaskTitle("");
       setTaskDescription("");
       setTaskAssigneeIds([]);
+      setCreateTaskOpen(false);
       setSelectedTask(detail);
       await reload();
     });
@@ -272,12 +283,17 @@ export default function StoryTasksClient({
         title={story.title}
         description={story.description || "Tablero Kanban de tareas de esta historia de usuario."}
         actions={
-          <Link
-            href={`/projects/${projectId}`}
-            className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--hairline)] bg-[var(--glass)] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition hover:bg-[var(--glass-strong)]"
-          >
-            Volver a historias
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={() => setCreateTaskOpen(true)}>
+              Nueva tarea
+            </Button>
+            <Link
+              href={`/projects/${projectId}`}
+              className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--hairline)] bg-[var(--glass)] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition hover:bg-[var(--glass-strong)]"
+            >
+              Volver a historias
+            </Link>
+          </div>
         }
       />
       <ErrorBanner message={error} />
@@ -294,9 +310,9 @@ export default function StoryTasksClient({
         </span>
       </div>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
-          <div className="flex gap-4 overflow-x-auto pb-4">
+      <section className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             {TASK_STATUS_ORDER.map((status) => {
               const columnTasks = tasks.filter((task) => task.status === status);
               return (
@@ -304,7 +320,7 @@ export default function StoryTasksClient({
                   key={status}
                   onDragOver={(event) => handleDragOver(event, status)}
                   onDrop={(event) => handleDrop(event, status)}
-                  className={`w-[280px] shrink-0 min-h-80 rounded-2xl border p-3 backdrop-blur-xl transition-all duration-200 ${
+                  className={`min-h-80 min-w-0 rounded-2xl border p-3 backdrop-blur-xl transition-all duration-200 ${
                     draggingTaskId !== null && dragOverColumn === status
                       ? "border-[var(--foreground)]/30 bg-[var(--foreground)]/[0.02] shadow-inner"
                       : "border-[var(--hairline)] bg-[var(--glass)]"
@@ -365,35 +381,7 @@ export default function StoryTasksClient({
           </div>
         </div>
 
-        <div className="space-y-6">
-          <Card>
-            <h2 className="text-lg font-semibold text-[var(--foreground)]">Crear tarea</h2>
-            <form onSubmit={createTask} className="mt-5 space-y-4">
-              <Field label="Titulo de tarea">
-                <TextInput value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} />
-              </Field>
-              <Field label="Descripcion">
-                <TextArea value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} />
-              </Field>
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">Asignados</p>
-                <div className="mt-2 grid gap-2">
-                  {project.members.map((member) => (
-                    <label key={member.userId} className="flex items-center gap-2 rounded-xl border border-[var(--hairline)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--muted)]">
-                      <input
-                        type="checkbox"
-                        checked={taskAssigneeIds.includes(member.userId)}
-                        onChange={() => toggleAssignee(member.userId)}
-                      />
-                      {member.fullName}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <Button type="submit" disabled={busy || !taskTitle.trim()}>Crear tarea</Button>
-            </form>
-          </Card>
-
+        <div className="min-w-0 space-y-6">
           {selectedTask === null ? (
             <Card>
               <h2 className="text-lg font-semibold text-[var(--foreground)]">Detalle</h2>
@@ -447,6 +435,47 @@ export default function StoryTasksClient({
 
       {tasks.length === 0 && (
         <EmptyState title="No hay tareas" description="Crea la primera tarea de esta historia para iniciar el seguimiento Kanban." />
+      )}
+
+      {createTaskOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 backdrop-blur-sm" onMouseDown={() => setCreateTaskOpen(false)}>
+          <Card className="max-h-[90vh] w-full max-w-lg overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="create-task-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="create-task-title" className="text-lg font-semibold text-[var(--foreground)]">Crear tarea</h2>
+                <p className="mt-1 text-sm text-[var(--muted)]">Agrega una tarea a esta historia de usuario.</p>
+              </div>
+              <Button type="button" variant="ghost" onClick={() => setCreateTaskOpen(false)}>Cerrar</Button>
+            </div>
+            <form onSubmit={createTask} className="mt-5 space-y-4">
+              <Field label="Titulo de tarea">
+                <TextInput value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} autoFocus />
+              </Field>
+              <Field label="Descripcion">
+                <TextArea value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} />
+              </Field>
+              <div>
+                <p className="text-sm font-medium text-[var(--foreground)]">Asignados</p>
+                <div className="mt-2 grid gap-2">
+                  {project.members.map((member) => (
+                    <label key={member.userId} className="flex items-center gap-2 rounded-xl border border-[var(--hairline)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--muted)]">
+                      <input
+                        type="checkbox"
+                        checked={taskAssigneeIds.includes(member.userId)}
+                        onChange={() => toggleAssignee(member.userId)}
+                      />
+                      {member.fullName}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={() => setCreateTaskOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={busy || !taskTitle.trim()}>Crear tarea</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
       )}
 
       {deleteTask !== null && (

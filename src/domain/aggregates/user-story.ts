@@ -5,7 +5,7 @@ import { UserStoryId } from "../ids/user-story-id";
 import type { Description } from "../value-objects/description";
 import type { WorkItemName } from "../value-objects/work-item-name";
 import type { SprintTask } from "./sprint-task";
-import { TaskStatus } from "../enums/task-status";
+import { getTaskStatusProgress } from "../enums/task-status";
 
 export class UserStory extends AggregateRoot<UserStoryId> {
   private readonly _projectId: ProjectId;
@@ -91,7 +91,10 @@ export class UserStory extends AggregateRoot<UserStoryId> {
         "Todas las tareas deben pertenecer al mismo proyecto de la historia de usuario.",
       );
     }
-    const completed = storyTasks.filter((task) => task.status === TaskStatus.Completed).length;
-    return (completed * 100) / storyTasks.length;
+    const total = storyTasks.reduce(
+      (sum, task) => sum + getTaskStatusProgress(task.status),
+      0,
+    );
+    return total / storyTasks.length;
   }
 }

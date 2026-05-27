@@ -17,6 +17,7 @@ export type McpToolName =
   | "get_task_by_id"
   | "search_tasks"
   | "update_task_status"
+  | "bulk_update_tasks"
   | "add_task_agent_note"
   | "get_sprintroom_mcp_skill"
   | "get_project_detail"
@@ -36,6 +37,7 @@ export type McpToolArgument =
   | GetTaskByIdArgs
   | SearchTasksArgs
   | UpdateTaskStatusArgs
+  | BulkUpdateTasksArgs
   | AddTaskAgentNoteArgs
   | GetSprintroomMcpSkillArgs
   | GetProjectDetailArgs
@@ -82,6 +84,14 @@ export interface UpdateTaskStatusArgs {
   readonly tool: "update_task_status";
   readonly taskId: string;
   readonly status: McpTaskStatus;
+}
+
+export interface BulkUpdateTasksArgs {
+  readonly tool: "bulk_update_tasks";
+  readonly updates: ReadonlyArray<{
+    readonly taskId: string;
+    readonly status: McpTaskStatus;
+  }>;
 }
 
 export interface AddTaskAgentNoteArgs {
@@ -196,6 +206,23 @@ export interface McpStatusUpdateResult {
   readonly newStatus: McpTaskStatus;
 }
 
+export interface McpBulkUpdateTasksResult {
+  readonly updatedTasks: ReadonlyArray<{
+    readonly taskId: string;
+    readonly previousStatus: McpTaskStatus;
+    readonly newStatus: McpTaskStatus;
+  }>;
+  readonly failedTasks: ReadonlyArray<{
+    readonly taskId: string;
+    readonly reason: string;
+  }>;
+  readonly summary: {
+    readonly requested: number;
+    readonly updated: number;
+    readonly failed: number;
+  };
+}
+
 export interface McpNoteAddResult {
   readonly noteId: string;
   readonly taskId: string;
@@ -218,7 +245,7 @@ export interface McpSkillPackage {
   readonly version: string;
   readonly description: string;
   readonly recommendedInstallDir: "sprintroom-mcp";
-  readonly installDirPriority: readonly [".agentes/", ".skills/", ".sprintroom/"];
+  readonly installDirPriority: readonly [".agents/skills/"];
   readonly files: ReadonlyArray<McpSkillPackageFile>;
   readonly agentsInstruction: string;
   readonly tools: ReadonlyArray<McpSkillPackageToolSummary>;

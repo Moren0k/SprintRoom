@@ -8,7 +8,7 @@ import { Description } from "../../../src/domain/value-objects/description";
 import { WorkItemName } from "../../../src/domain/value-objects/work-item-name";
 
 describe("UserStory aggregate", () => {
-  it("calculateProgress should return completion percentage", () => {
+  it("calculateProgress should average task status progress", () => {
     const projectId = ProjectId.new();
     const now = new Date();
     const story = UserStory.create(
@@ -25,7 +25,7 @@ describe("UserStory aggregate", () => {
       Description.create("Formulario"),
       now,
     );
-    taskA.updateStatus(TaskStatus.Completed, new Date(now.getTime() + 60_000));
+    taskA.updateStatus(TaskStatus.Review, new Date(now.getTime() + 60_000));
 
     const taskB = SprintTask.create(
       projectId,
@@ -36,7 +36,7 @@ describe("UserStory aggregate", () => {
     );
 
     const progress = story.calculateProgress([taskA, taskB]);
-    expect(progress).toBe(50);
+    expect(progress).toBe(45);
   });
 
   it("calculateProgress should reject tasks from different project", () => {

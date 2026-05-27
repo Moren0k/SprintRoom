@@ -2,29 +2,30 @@ import { DomainError } from "../errors/domain-error";
 import { DeletionConfirmationPolicy } from "./deletion-confirmation-policy";
 
 export const DeletionGuard = {
+  destructiveConfirmation: "ELIMINAR TODO",
+
   ensureProjectCanBeDeleted(
     expectedName: string,
     providedName: string,
-    hasUserStories: boolean,
-    hasTasks: boolean,
+    destructiveConfirmation: string,
   ): void {
     DeletionConfirmationPolicy.ensureConfirmation(expectedName, providedName);
-    if (hasUserStories || hasTasks) {
-      throw new DomainError(
-        "No se puede eliminar un proyecto con historias de usuario o tareas asociadas.",
-      );
-    }
+    this.ensureDestructiveConfirmation(destructiveConfirmation);
   },
 
   ensureUserStoryCanBeDeleted(
     expectedName: string,
     providedName: string,
-    hasTasks: boolean,
+    destructiveConfirmation: string,
   ): void {
     DeletionConfirmationPolicy.ensureConfirmation(expectedName, providedName);
-    if (hasTasks) {
+    this.ensureDestructiveConfirmation(destructiveConfirmation);
+  },
+
+  ensureDestructiveConfirmation(value: string): void {
+    if (value.trim() !== this.destructiveConfirmation) {
       throw new DomainError(
-        "No se puede eliminar una historia de usuario con tareas asociadas.",
+        `La segunda confirmacion debe ser exactamente ${this.destructiveConfirmation}.`,
       );
     }
   },

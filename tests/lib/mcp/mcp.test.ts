@@ -39,6 +39,7 @@ import {
 import {
   McpGetSprintTaskDetailHandler,
   McpUpdateTaskStatusHandler,
+  McpBulkUpdateTasksHandler,
   AddTaskAgentNoteHandler,
 } from "../../../src/application/features/tasks";
 import {
@@ -204,6 +205,7 @@ function createService(deps: {
 
   const taskDetailHandler = new McpGetSprintTaskDetailHandler(sprintTasks);
   const updateTaskStatusHandler = new McpUpdateTaskStatusHandler(sprintTasks, uow, clock);
+  const bulkUpdateTasksHandler = new McpBulkUpdateTasksHandler(sprintTasks, uow, clock);
   const addTaskAgentNoteHandler = new AddTaskAgentNoteHandler(sprintTasks, taskAgentNotes);
   const getProjectDetailHandler = new GetProjectDetailHandler(projects, userStories, sprintTasks);
   const listProjectMembersHandler = new ListProjectMembersHandler(projects, users);
@@ -248,6 +250,7 @@ function createService(deps: {
     PROJECT_KEY_ID_A,
     taskDetailHandler,
     updateTaskStatusHandler,
+    bulkUpdateTasksHandler,
     addTaskAgentNoteHandler,
     getProjectDetailHandler,
     listProjectMembersHandler,
@@ -264,7 +267,7 @@ function createService(deps: {
 
 describe("MCP", () => {
   describe("tools/list", () => {
-    it("should expose definitions for all 12 tools", () => {
+    it("should expose definitions for all tools", () => {
       const names = MCP_TOOL_DEFINITIONS.map((t) => t.name);
       expect(names).toEqual([
         "get_project_backlog",
@@ -272,6 +275,7 @@ describe("MCP", () => {
         "get_task_by_id",
         "search_tasks",
         "update_task_status",
+        "bulk_update_tasks",
         "add_task_agent_note",
         "get_sprintroom_mcp_skill",
         "get_project_detail",
@@ -430,6 +434,44 @@ describe("MCP", () => {
 
       const sprintTasksTable = database.tables.get("sprint_tasks") ?? [];
       expect(sprintTasksTable.length).toBe(0);
+    });
+  });
+
+  describe("bulk_update_tasks", () => {
+    it("should update multiple tasks and report partial failures", async () => {
+      const database = new FakeMcpDatabaseGateway();
+      const { sprintTasks, taskAgentNotes, uow } = setupProjectA();
+      setupProjectB(sprintTasks);
+      const service = createService({ database, sprintTasks, taskAgentNotes, uow });
+
+      const result = await service.bulkUpdateTasks(PROJECT_A_ID, {
+        tool: "bulk_update_tasks",
+        updates: [
+          { taskId: TASK_A_ID, status: "testing" },
+          { taskId: TASK_B_ID, status: "review" },
+        ],
+      });
+
+      expect(result.summary).toEqual({ requested: 2, updated: 1, failed: 1 });
+      expect(result.updatedTasks[0]).toMatchObject({
+        taskId: TASK_A_ID,
+        previousStatus: "not_started",
+        newStatus: "testing",
+      });
+      expect(result.failedTasks[0].taskId).toBe(TASK_B_ID);
+
+      const updated = await sprintTasks.getById(SprintTaskId.from(TASK_A_ID));
+      expect(updated!.status).toBe("testing");
+    });
+
+    it("should validate updates payload", () => {
+      expect(() => parseToolArgs({ tool: "bulk_update_tasks", updates: [] })).toThrow(McpDispatchError);
+      expect(() =>
+        parseToolArgs({
+          tool: "bulk_update_tasks",
+          updates: [{ taskId: TASK_A_ID, status: "invalid" }],
+        }),
+      ).toThrow(McpDispatchError);
     });
   });
 

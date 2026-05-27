@@ -36,6 +36,7 @@ export async function DELETE(request: Request, context: UserStoryRouteContext): 
       requestContext: scope.requestContext,
       userStoryId,
       confirmationName: requireString(body, "confirmationName"),
+      destructiveConfirmation: requireString(body, "destructiveConfirmation"),
     });
     await scope.auditLogger.record({
       actorId: scope.requestContext.userId,

@@ -12,7 +12,6 @@ const NAV_ITEMS = [
   { href: "/projects", label: "Proyectos", icon: IconFolder },
   { href: "/tasks", label: "Mis tareas", icon: IconChecklist },
   { href: "/documentacion", label: "Docs", icon: IconBook },
-  { href: "/account", label: "Cuenta", icon: IconUser },
 ] as const;
 
 export default function AppShell({ children }: { readonly children: ReactNode }) {
@@ -66,7 +65,11 @@ function ShellFrame({ children }: { readonly children: ReactNode }) {
         </nav>
 
         <div className="border-t border-[var(--hairline)] p-3">
-          <div className="mb-2 flex items-center gap-3 rounded-xl px-3 py-2">
+          <Link
+            href="/account"
+            aria-label="Abrir cuenta y configuracion"
+            className="mb-2 flex items-center gap-3 rounded-xl px-3 py-2 outline-none transition hover:bg-[var(--glass)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25"
+          >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass)] text-sm font-medium text-[var(--foreground)]">
               {(user.fullName ?? "?").charAt(0).toUpperCase()}
             </div>
@@ -78,7 +81,7 @@ function ShellFrame({ children }: { readonly children: ReactNode }) {
                 {user.systemRole}
               </p>
             </div>
-          </div>
+          </Link>
           <button
             onClick={logout}
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-[var(--muted)] transition hover:bg-[var(--glass)] hover:text-[var(--foreground)]"
@@ -103,9 +106,13 @@ function ShellFrame({ children }: { readonly children: ReactNode }) {
         >
           SprintRoom
         </Link>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--glass)] text-sm font-medium text-[var(--foreground)]">
+        <Link
+          href="/account"
+          aria-label="Abrir cuenta y configuracion"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--glass)] text-sm font-medium text-[var(--foreground)] outline-none transition hover:bg-[var(--glass-strong)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25"
+        >
           {(user.fullName ?? "?").charAt(0).toUpperCase()}
-        </div>
+        </Link>
       </header>
 
       {sidebarOpen && (
@@ -158,6 +165,15 @@ function ShellFrame({ children }: { readonly children: ReactNode }) {
         </nav>
 
         <div className="border-t border-[var(--hairline)] p-3">
+          <Link
+            href="/account"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Abrir cuenta y configuracion"
+            className="mb-2 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-[var(--muted)] transition hover:bg-[var(--glass)] hover:text-[var(--foreground)]"
+          >
+            <IconUser className="h-5 w-5 shrink-0" />
+            {user.fullName}
+          </Link>
           <button
             onClick={() => {
               logout();

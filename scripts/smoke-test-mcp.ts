@@ -115,13 +115,13 @@ async function main(): Promise<void> {
     await send(proc, {
       jsonrpc: "2.0",
       id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "0.1.0",
-        capabilities: {},
-        clientInfo: { name: "smoke-test", version: "1.0.0" },
-      },
-    });
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "smoke-test", version: "1.0.0" },
+        },
+      });
 
     {
       const resp = await recv();

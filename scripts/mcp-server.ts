@@ -8,6 +8,7 @@ import { SystemClock } from "@/src/lib/system-clock";
 import {
   McpGetSprintTaskDetailHandler,
   McpUpdateTaskStatusHandler,
+  McpBulkUpdateTasksHandler,
   AddTaskAgentNoteHandler,
 } from "@/src/application/features/tasks";
 import {
@@ -27,7 +28,18 @@ import {
 
 const SERVER_NAME = "sprintroom-mcp";
 const SERVER_VERSION = "mcp-sprintroom-1.0";
-const PROTOCOL_VERSION = "0.1.0";
+
+// MCP clients expect a date-based protocol version (e.g. 2024-11-05).
+// Keep a sane default and, when possible, echo the client's requested version.
+const DEFAULT_PROTOCOL_VERSION = "2024-11-05";
+
+function negotiateProtocolVersion(requested: unknown): string {
+  if (typeof requested === "string") {
+    const v = requested.trim();
+    if (v && v !== "0.1.0") return v;
+  }
+  return DEFAULT_PROTOCOL_VERSION;
+}
 
 let projectId: string;
 let service: McpService;
@@ -57,12 +69,15 @@ function toolErrorResult(message: string): unknown {
   };
 }
 
-async function handleInitialize(id: unknown): Promise<void> {
+async function handleInitialize(
+  id: unknown,
+  params: Record<string, unknown>,
+): Promise<void> {
   writeJson({
     jsonrpc: "2.0",
     id,
     result: {
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: negotiateProtocolVersion(params.protocolVersion),
       capabilities: { tools: {} },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
     },
@@ -126,6 +141,8 @@ async function handleToolsCall(
       result = await service.searchTasks(projectId, parsed);
     } else if (parsed.tool === "update_task_status") {
       result = await service.updateTaskStatus(projectId, parsed);
+    } else if (parsed.tool === "bulk_update_tasks") {
+      result = await service.bulkUpdateTasks(projectId, parsed);
     } else if (parsed.tool === "add_task_agent_note") {
       result = await service.addTaskAgentNote(projectId, parsed);
     } else if (parsed.tool === "get_sprintroom_mcp_skill") {
@@ -211,7 +228,7 @@ async function handleRequest(line: string): Promise<void> {
       : {};
 
   if (method === "initialize") {
-    await handleInitialize(id);
+    await handleInitialize(id, params);
   } else if (method === "ping") {
     handlePing(id);
   } else if (method === "tools/list") {
@@ -247,6 +264,11 @@ async function main(): Promise<void> {
       repositories.sprintTasks,
     );
     const updateTaskStatusHandler = new McpUpdateTaskStatusHandler(
+      repositories.sprintTasks,
+      repositories.unitOfWork,
+      clock,
+    );
+    const bulkUpdateTasksHandler = new McpBulkUpdateTasksHandler(
       repositories.sprintTasks,
       repositories.unitOfWork,
       clock,
@@ -313,6 +335,7 @@ async function main(): Promise<void> {
       resolution.keyId,
       taskDetailHandler,
       updateTaskStatusHandler,
+      bulkUpdateTasksHandler,
       addTaskAgentNoteHandler,
       getProjectDetailHandler,
       listProjectMembersHandler,

@@ -8,7 +8,7 @@ import { Description } from "../../../src/domain/value-objects/description";
 import { WorkItemName } from "../../../src/domain/value-objects/work-item-name";
 
 describe("ProjectProgressCalculator", () => {
-  it("calculate should average user story progress", () => {
+  it("calculate should average all task status progress", () => {
     const projectId = ProjectId.new();
     const now = new Date();
     const later = new Date(now.getTime() + 60_000);
@@ -33,7 +33,7 @@ describe("ProjectProgressCalculator", () => {
       Description.create("A1"),
       now,
     );
-    taskA1.updateStatus(TaskStatus.Completed, later);
+    taskA1.updateStatus(TaskStatus.InDevelopment, later);
 
     const taskA2 = SprintTask.create(
       projectId,
@@ -57,6 +57,18 @@ describe("ProjectProgressCalculator", () => {
       [taskA1, taskA2, taskB1],
     );
 
-    expect(progress).toBe(75);
+    expect(progress).toBe((40 + 0 + 100) / 3);
+  });
+
+  it("calculate should return 0 when project has no tasks", () => {
+    const projectId = ProjectId.new();
+    const story = UserStory.create(
+      projectId,
+      WorkItemName.create("Historia", "historia de usuario"),
+      Description.create(""),
+      new Date(),
+    );
+
+    expect(ProjectProgressCalculator.calculate([story], [])).toBe(0);
   });
 });

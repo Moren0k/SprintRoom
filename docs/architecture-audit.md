@@ -108,7 +108,7 @@ Calificaciones:
 | 11. Observabilidad mínima | Cumple parcialmente | `audit_events`, `src/lib/audit/audit-logger.ts`, `console.error` en AI routes | Medio-Alto | Falta logging estructurado y trazabilidad MCP/IA extremo a extremo |
 | 12. Contratos compartidos | Cumple parcialmente | DTOs en `src/application/models/application-dtos.ts`; validadores en `src/server/validation.ts` | Medio | Tipos duplicados en `src/frontend/types.ts` y contratos MCP separados sin source of truth común |
 | 13. Tests relevantes | Cumple | `tests/domain/**`, `tests/application/**`, `tests/lib/**` — **57 tests** | Medio | Faltan tests de API routes, integración real con InsForge y flujos AI/chat |
-| 14. Documentación real y actualizada | Cumple parcialmente | `README.md`, `docs/**`, `.sprintroom/sprintroom-mcp/SKILL.md` | Medio | Falta documento único de arquitectura y matriz de permisos completa |
+| 14. Documentación real y actualizada | Cumple parcialmente | `README.md`, `docs/**`, `.agents/skills/sprintroom-mcp/SKILL.md` | Medio | Falta documento único de arquitectura y matriz de permisos completa |
 
 ## 5. Mapa real de arquitectura actual
 Árbol resumido:
@@ -287,7 +287,7 @@ Qué agregaría primero:
 Qué existe:
 - `README.md`
 - `AGENTS.md`
-- `.sprintroom/sprintroom-mcp/SKILL.md`
+- `.agents/skills/sprintroom-mcp/SKILL.md`
 - múltiples docs en `docs/`
 
 Qué está bien:

@@ -23,3 +23,15 @@ export const TASK_STATUS_ORDER: TaskStatus[] = [
   TaskStatus.Review,
   TaskStatus.Completed,
 ];
+
+export const TASK_STATUS_PROGRESS: Record<TaskStatus, number> = {
+  [TaskStatus.NotStarted]: 0,
+  [TaskStatus.InDevelopment]: 40,
+  [TaskStatus.Testing]: 70,
+  [TaskStatus.Review]: 90,
+  [TaskStatus.Completed]: 100,
+};
+
+export function getTaskStatusProgress(status: TaskStatus): number {
+  return TASK_STATUS_PROGRESS[status];
+}

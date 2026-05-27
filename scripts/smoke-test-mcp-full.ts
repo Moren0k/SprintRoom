@@ -236,7 +236,7 @@ async function fullSuite(label: string, command: string[], extraEnv: Record<stri
       label: "initialize",
       request: {
         jsonrpc: "2.0", id: 1, method: "initialize",
-        params: { protocolVersion: "0.1.0", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
+        params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
       },
       check: (r) => {
         const o = r as Record<string, unknown>;

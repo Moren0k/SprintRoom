@@ -22,6 +22,7 @@ export interface DeleteProjectCommand {
   requestContext: RequestContext;
   projectId: string;
   confirmationName: string;
+  destructiveConfirmation: string;
 }
 
 export class DeleteProjectHandler
@@ -48,10 +49,15 @@ export class DeleteProjectHandler
     DeletionGuard.ensureProjectCanBeDeleted(
       project.name.value,
       command.confirmationName,
-      stories.length > 0,
-      tasks.length > 0,
+      command.destructiveConfirmation,
     );
 
+    for (const task of tasks) {
+      await this.sprintTaskRepository.delete(task);
+    }
+    for (const story of stories) {
+      await this.userStoryRepository.delete(story);
+    }
     await this.projectRepository.delete(project);
     await this.unitOfWork.saveChanges();
     return UnitValue;
@@ -64,6 +70,7 @@ export interface DeleteUserStoryCommand {
   requestContext: RequestContext;
   userStoryId: string;
   confirmationName: string;
+  destructiveConfirmation: string;
 }
 
 export class DeleteUserStoryHandler
@@ -95,9 +102,12 @@ export class DeleteUserStoryHandler
     DeletionGuard.ensureUserStoryCanBeDeleted(
       story.title.value,
       command.confirmationName,
-      tasks.length > 0,
+      command.destructiveConfirmation,
     );
 
+    for (const task of tasks) {
+      await this.sprintTaskRepository.delete(task);
+    }
     await this.userStoryRepository.delete(story);
     await this.unitOfWork.saveChanges();
     return UnitValue;
