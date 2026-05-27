@@ -5,6 +5,7 @@ import {
 import { createAuthenticatedApplicationScope } from "../../../../../src/server/application-scope";
 import { created, handleRouteError, ok, readJsonObject } from "../../../../../src/server/http";
 import { optionalString, requireString, requireUuid } from "../../../../../src/server/validation";
+import { assertAuthenticatedMutation } from "../../../../../src/server/security";
 
 interface ProjectUserStoriesRouteContext {
   readonly params: Promise<{ readonly projectId: string }>;
@@ -33,6 +34,7 @@ export async function POST(
   context: ProjectUserStoriesRouteContext,
 ): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const projectId = requireUuid((await context.params).projectId, "projectId");
     const body = await readJsonObject(request);
     const scope = await createAuthenticatedApplicationScope(request);

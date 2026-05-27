@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { createInsForgeDatabaseGateway, createInsForgeRepositoryScope } from "@/src/lib/insforge";
+import { createAdminInsForgeDatabaseGateway, createInsForgeRepositoryScope } from "@/src/lib/insforge";
 import { McpService } from "@/src/lib/mcp/service";
 import { resolveProjectKey, McpAuthenticationError } from "@/src/lib/mcp/auth";
 import { parseToolArgs, MCP_TOOL_DEFINITIONS } from "@/src/lib/mcp/tools";
@@ -78,7 +78,7 @@ async function handleInitialize(
     id,
     result: {
       protocolVersion: negotiateProtocolVersion(params.protocolVersion),
-      capabilities: { tools: {} },
+      capabilities: { tools: {}, prompts: {} },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
     },
   });
@@ -98,8 +98,113 @@ function handleToolsList(id: unknown): void {
   });
 }
 
+function handlePromptsList(id: unknown): void {
+  writeJson({
+    jsonrpc: "2.0",
+    id,
+    result: {
+      prompts: [
+        {
+          name: "sprintroom-init",
+          description:
+            "Instrucciones iniciales para que el agente use SprintRoom: herramientas disponibles, estados validos, flujo recomendado y reglas de comportamiento.",
+          arguments: [
+            {
+              name: "language",
+              description:
+                "Idioma para las instrucciones (es, en). Por defecto: es.",
+              required: false,
+            },
+          ],
+        },
+      ],
+    },
+  });
+}
+
 function handlePing(id: unknown): void {
   writeJson({ jsonrpc: "2.0", id, result: {} });
+}
+
+function handlePromptsGet(
+  id: unknown,
+  params: Record<string, unknown>,
+): void {
+  const name =
+    typeof params.name === "string" ? params.name : "";
+
+  if (name !== "sprintroom-init") {
+    writeJson({
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32602, message: `Prompt desconocido: ${name}` },
+    });
+    return;
+  }
+
+  const args =
+    typeof params.arguments === "object" &&
+    params.arguments !== null &&
+    !Array.isArray(params.arguments)
+      ? (params.arguments as Record<string, unknown>)
+      : {};
+
+  const language = typeof args.language === "string" ? args.language : "es";
+
+  writeJson({
+    jsonrpc: "2.0",
+    id,
+    result: {
+      description: "Instrucciones iniciales de SprintRoom para el agente.",
+      messages: [
+        {
+          role: "system",
+          content: {
+            type: "text",
+            text: generateSprintroomInitPrompt(language),
+          },
+        },
+      ],
+    },
+  });
+}
+
+function generateSprintroomInitPrompt(language: string): string {
+  return [
+    "# SprintRoom - Instrucciones para el Agente",
+    "",
+    "## Proposito",
+    "SprintRoom es un sistema de gestion de proyectos agil. Usa las herramientas MCP para leer y modificar el backlog, historias de usuario y tareas.",
+    "",
+    "## Estados Validos",
+    "- `not_started`: 0%",
+    "- `in_progress`: 40%",
+    "- `testing`: 70%",
+    "- `review`: 90%",
+    "- `completed`: 100%",
+    "",
+    "No uses `todo`, `done` ni `blocked`.",
+    "",
+    "## Herramientas Disponibles",
+    `El servidor MCP expone herramientas de lectura (backlog, historias, tareas, miembros, actividad) y escritura (crear/actualizar tareas, cambiar estados, asignar, comentar, agregar notas de agente). Usa \`tools/list\` para ver la lista completa con esquemas.`,
+    "",
+    "## Flujo Recomendado",
+    "1. \`get_project_detail\` para resumen del proyecto.",
+    "2. \`get_project_backlog\` o \`search_tasks\` para ubicar trabajo.",
+    "3. \`get_task_by_id\` antes de escribir.",
+    "4. \`update_task_status\` o \`bulk_update_tasks\` segun alcance.",
+    "5. Ejecuta el trabajo fuera del MCP.",
+    "6. \`add_task_agent_note\` con resumen tecnico.",
+    "7. Mueve a \`testing\`, \`review\` o \`completed\` segun evidencia.",
+    "",
+    "## Reglas Finales",
+    "- Lee antes de escribir.",
+    "- No expongas la PROJECT_KEY.",
+    "- No inventes herramientas, parametros, estados ni endpoints.",
+    "- SprintRoom no tiene CLI propio.",
+    "- Si falta informacion, pide solo el dato minimo necesario.",
+    "- Al crear tareas, la descripcion debe incluir criterios de aceptacion en formato Given/When/Then y notas tecnicas.",
+  ].join("\n");
 }
 
 async function handleToolsCall(
@@ -235,11 +340,15 @@ async function handleRequest(line: string): Promise<void> {
     handleToolsList(id);
   } else if (method === "tools/call") {
     await handleToolsCall(id, params);
+  } else if (method === "prompts/list") {
+    handlePromptsList(id);
+  } else if (method === "prompts/get") {
+    handlePromptsGet(id, params);
   } else {
     jsonRpcError(
       id,
       -32601,
-      `Metodo no soportado: ${method}. Soporta: initialize, ping, tools/list, tools/call`,
+      `Metodo no soportado: ${method}. Soporta: initialize, ping, tools/list, tools/call, prompts/list, prompts/get`,
     );
   }
 }
@@ -253,7 +362,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    const database = createInsForgeDatabaseGateway();
+    const database = createAdminInsForgeDatabaseGateway();
     const resolution = await resolveProjectKey(database, projectKey);
     projectId = resolution.projectId;
     const auditLogger = new InsForgeAuditLogger(database);

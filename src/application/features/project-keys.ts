@@ -75,11 +75,13 @@ export class CreateProjectMcpKeyHandler {
     const now = new Date().toISOString();
     const keyId = randomUUID();
     const rawKey = KEY_PREFIX + randomBytes(24).toString("hex");
+    const keyFingerprint = this.keyHasher.fingerprint(rawKey);
     const keyHash = this.keyHasher.hash(rawKey);
 
     await this.projectKeyRepository.add({
       id: keyId,
       projectId: command.projectId,
+      keyFingerprint,
       keyHash,
       description: command.description,
       isActive: true,

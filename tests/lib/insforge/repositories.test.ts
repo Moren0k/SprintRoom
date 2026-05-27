@@ -6,6 +6,8 @@ import { UserStory } from "../../../src/domain/aggregates/user-story";
 import { AccountOrigin } from "../../../src/domain/enums/account-origin";
 import { ProjectRole } from "../../../src/domain/enums/project-role";
 import { SystemRole } from "../../../src/domain/enums/system-role";
+import { ProjectId } from "../../../src/domain/ids/project-id";
+import { UserStoryId } from "../../../src/domain/ids/user-story-id";
 import { UserId } from "../../../src/domain/ids/user-id";
 import { CommentBody } from "../../../src/domain/value-objects/comment-body";
 import { Description } from "../../../src/domain/value-objects/description";
@@ -25,6 +27,7 @@ import { createInsForgeRepositoryScope } from "../../../src/lib/insforge/reposit
 class FakeInsForgeDatabaseGateway implements InsForgeDatabaseGateway {
   readonly tables = new Map<string, Record<string, unknown>[]>();
   readonly operations: string[] = [];
+  readonly failingRpcs = new Set<string>();
 
   async selectRows<T>(table: string, options: SelectRowsOptions = {}): Promise<T[]> {
     this.operations.push(`select:${table}`);
@@ -73,6 +76,74 @@ class FakeInsForgeDatabaseGateway implements InsForgeDatabaseGateway {
     this.operations.push(`delete:${table}`);
     const remaining = this.table(table).filter((row) => !this.matches(row, filters));
     this.tables.set(table, remaining);
+  }
+
+  async rpc<T>(functionName: string, options: { args?: Record<string, unknown> } = {}): Promise<T> {
+    this.operations.push(`rpc:${functionName}`);
+    if (this.failingRpcs.has(functionName)) {
+      throw new Error(`Simulated RPC failure: ${functionName}`);
+    }
+
+    const snapshot = new Map(
+      [...this.tables.entries()].map(([table, rows]) => [table, rows.map((row) => ({ ...row }))]),
+    );
+
+    try {
+      switch (functionName) {
+        case "save_project_bundle": {
+          const project = { ...(options.args?.p_project as Record<string, unknown>) };
+          const members = ((options.args?.p_members as Record<string, unknown>[] | undefined) ?? []).map((member) => ({ ...member }));
+          await this.upsertRows("projects", [project], { onConflict: "id" });
+          await this.deleteRows("project_members", [{ operator: "eq", column: "project_id", value: project.id }]);
+          await this.insertRows("project_members", members);
+          break;
+        }
+        case "save_sprint_task_bundle": {
+          const task = { ...(options.args?.p_task as Record<string, unknown>) };
+          const assignments = ((options.args?.p_assignments as Record<string, unknown>[] | undefined) ?? []).map((row) => ({ ...row }));
+          const comments = ((options.args?.p_comments as Record<string, unknown>[] | undefined) ?? []).map((row) => ({ ...row }));
+          await this.upsertRows("sprint_tasks", [task], { onConflict: "id" });
+          await this.deleteRows("sprint_task_assignments", [{ operator: "eq", column: "task_id", value: task.id }]);
+          await this.insertRows("sprint_task_assignments", assignments);
+          await this.upsertRows("task_comments", comments, { onConflict: "id" });
+          break;
+        }
+        case "delete_sprint_task_bundle": {
+          const taskId = options.args?.p_task_id;
+          const retainedComments = ((options.args?.p_retained_comments as Record<string, unknown>[] | undefined) ?? []).map((row) => ({ ...row }));
+          await this.upsertRows("retained_task_comments", retainedComments, { onConflict: "comment_id" });
+          await this.deleteRows("sprint_tasks", [{ operator: "eq", column: "id", value: taskId }]);
+          break;
+        }
+        case "delete_user_story_bundle": {
+          const userStoryId = options.args?.p_user_story_id;
+          const retainedComments = ((options.args?.p_retained_comments as Record<string, unknown>[] | undefined) ?? []).map((row) => ({ ...row }));
+          await this.upsertRows("retained_task_comments", retainedComments, { onConflict: "comment_id" });
+          await this.deleteRows("sprint_tasks", [{ operator: "eq", column: "user_story_id", value: userStoryId }]);
+          await this.deleteRows("user_stories", [{ operator: "eq", column: "id", value: userStoryId }]);
+          break;
+        }
+        case "delete_project_bundle": {
+          const projectId = options.args?.p_project_id;
+          const retainedComments = ((options.args?.p_retained_comments as Record<string, unknown>[] | undefined) ?? []).map((row) => ({ ...row }));
+          await this.upsertRows("retained_task_comments", retainedComments, { onConflict: "comment_id" });
+          await this.deleteRows("sprint_tasks", [{ operator: "eq", column: "project_id", value: projectId }]);
+          await this.deleteRows("user_stories", [{ operator: "eq", column: "project_id", value: projectId }]);
+          await this.deleteRows("projects", [{ operator: "eq", column: "id", value: projectId }]);
+          break;
+        }
+        default:
+          throw new Error(`Unexpected RPC: ${functionName}`);
+      }
+    } catch (error) {
+      this.tables.clear();
+      for (const [table, rows] of snapshot) {
+        this.tables.set(table, rows);
+      }
+      throw error;
+    }
+
+    return null as T;
   }
 
   private table(name: string): Record<string, unknown>[] {
@@ -181,6 +252,8 @@ describe("InsForge repositories", () => {
         body: "Ready for review",
       },
     ]);
+    expect(database.operations).toContain("rpc:save_project_bundle");
+    expect(database.operations).toContain("rpc:save_sprint_task_bundle");
   });
 
   it("does not persist aggregates that were only loaded for reads", async () => {
@@ -225,5 +298,27 @@ describe("InsForge repositories", () => {
     expect(database.operations).toContain("upsert:user_stories");
     expect(database.operations).not.toContain("upsert:projects");
     expect(database.operations).not.toContain("delete:project_members");
+  });
+
+  it("does not leave partial sprint task writes when the transactional RPC fails", async () => {
+    const database = new FakeInsForgeDatabaseGateway();
+    database.failingRpcs.add("save_sprint_task_bundle");
+    const createdOnUtc = new Date("2026-05-23T10:00:00.000Z");
+
+    const scope = createInsForgeRepositoryScope(database);
+    const sprintTask = SprintTask.create(
+      ProjectId.from("00000000-0000-0000-0000-000000000010"),
+      UserStoryId.from("00000000-0000-0000-0000-000000000020"),
+      WorkItemName.create("Build API", "tarea"),
+      Description.create("Expose registration endpoint"),
+      createdOnUtc,
+    );
+
+    await scope.sprintTasks.add(sprintTask);
+    await expect(scope.unitOfWork.saveChanges()).rejects.toThrow(/save_sprint_task_bundle/);
+
+    expect(database.tables.get("sprint_tasks") ?? []).toHaveLength(0);
+    expect(database.tables.get("sprint_task_assignments") ?? []).toHaveLength(0);
+    expect(database.tables.get("task_comments") ?? []).toHaveLength(0);
   });
 });

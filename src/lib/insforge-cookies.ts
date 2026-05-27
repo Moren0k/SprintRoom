@@ -1,5 +1,8 @@
+import { randomBytes } from "node:crypto";
+
 export const INSFORGE_ACCESS_COOKIE = "insforge_access_token";
 export const INSFORGE_REFRESH_COOKIE = "insforge_refresh_token";
+export const INSFORGE_CSRF_COOKIE = "insforge_csrf_token";
 
 export const INSFORGE_ACCESS_COOKIE_MAX_AGE_SECONDS = 60 * 15;
 export const INSFORGE_REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
@@ -8,6 +11,13 @@ const cookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
+  path: "/",
+};
+
+const csrfCookieOptions = {
+  httpOnly: false,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict" as const,
   path: "/",
 };
 
@@ -26,6 +36,23 @@ export function setInsForgeSessionCookies(
       maxAge: INSFORGE_REFRESH_COOKIE_MAX_AGE_SECONDS,
     });
   }
+  setCookie(INSFORGE_CSRF_COOKIE, createCsrfToken(), {
+    ...csrfCookieOptions,
+    maxAge: INSFORGE_REFRESH_COOKIE_MAX_AGE_SECONDS,
+  });
+}
+
+export function ensureCsrfCookie(
+  setCookie: (name: string, value: string, options: Record<string, unknown>) => void,
+  currentCsrfToken: string | null,
+): void {
+  if (currentCsrfToken !== null && currentCsrfToken.length > 0) {
+    return;
+  }
+  setCookie(INSFORGE_CSRF_COOKIE, createCsrfToken(), {
+    ...csrfCookieOptions,
+    maxAge: INSFORGE_REFRESH_COOKIE_MAX_AGE_SECONDS,
+  });
 }
 
 export function clearInsForgeSessionCookies(
@@ -33,6 +60,7 @@ export function clearInsForgeSessionCookies(
 ): void {
   setCookie(INSFORGE_ACCESS_COOKIE, "", { ...cookieOptions, maxAge: 0 });
   setCookie(INSFORGE_REFRESH_COOKIE, "", { ...cookieOptions, maxAge: 0 });
+  setCookie(INSFORGE_CSRF_COOKIE, "", { ...csrfCookieOptions, maxAge: 0 });
 }
 
 export function getAccessTokenFromCookies(cookieHeader: string | null): string | null {
@@ -56,6 +84,20 @@ export function getRefreshTokenFromCookies(cookieHeader: string | null): string 
     if (eqIdx === -1) continue;
     const name = cookie.slice(0, eqIdx).trim();
     if (name === INSFORGE_REFRESH_COOKIE) {
+      const value = cookie.slice(eqIdx + 1).trim();
+      return value.length > 0 ? value : null;
+    }
+  }
+  return null;
+}
+
+export function getCsrfTokenFromCookies(cookieHeader: string | null): string | null {
+  if (cookieHeader === null) return null;
+  for (const cookie of cookieHeader.split(";")) {
+    const eqIdx = cookie.indexOf("=");
+    if (eqIdx === -1) continue;
+    const name = cookie.slice(0, eqIdx).trim();
+    if (name === INSFORGE_CSRF_COOKIE) {
       const value = cookie.slice(eqIdx + 1).trim();
       return value.length > 0 ? value : null;
     }
@@ -89,6 +131,7 @@ export function createInsForgeSessionCookieHeaders(
       ),
     );
   }
+  headers.push(createInsForgeCsrfCookieHeader(createCsrfToken(), INSFORGE_REFRESH_COOKIE_MAX_AGE_SECONDS));
   return headers;
 }
 
@@ -96,6 +139,7 @@ export function createInsForgeExpiredCookieHeaders(): string[] {
   return [
     createInsForgeExpiredAccessCookieHeader(),
     createInsForgeExpiredRefreshCookieHeader(),
+    createInsForgeExpiredCsrfCookieHeader(),
   ];
 }
 
@@ -122,4 +166,24 @@ export function createInsForgeExpiredAccessCookieHeader(): string {
 
 export function createInsForgeExpiredRefreshCookieHeader(): string {
   return createInsForgeCookieHeader(INSFORGE_REFRESH_COOKIE, "", 0);
+}
+
+export function createInsForgeCsrfCookieHeader(csrfToken: string, maxAgeSeconds: number): string {
+  return [
+    `${INSFORGE_CSRF_COOKIE}=${csrfToken}`,
+    "Path=/",
+    "SameSite=Strict",
+    `Max-Age=${maxAgeSeconds}`,
+    process.env.NODE_ENV === "production" ? "Secure" : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+export function createInsForgeExpiredCsrfCookieHeader(): string {
+  return createInsForgeCsrfCookieHeader("", 0);
+}
+
+function createCsrfToken(): string {
+  return randomBytes(32).toString("base64url");
 }

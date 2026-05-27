@@ -76,7 +76,10 @@ interface OperationalSnapshot {
 }
 
 export class InsForgeDashboardReadModel {
-  constructor(private readonly database: InsForgeDatabaseGateway) {}
+  constructor(
+    private readonly database: InsForgeDatabaseGateway,
+    private readonly userDatabase: InsForgeDatabaseGateway = database,
+  ) {}
 
   async getDashboard(context: RequestContext): Promise<DashboardDto> {
     const snapshot = await this.loadSnapshot(context);
@@ -138,7 +141,7 @@ export class InsForgeDashboardReadModel {
     if (member === undefined) {
       throw new ApplicationError("El usuario consultado no pertenece al proyecto.");
     }
-    const user = await this.database.selectOne<UserRow>("users", [
+    const user = await this.userDatabase.selectOne<UserRow>("users", [
       { operator: "eq", column: "id", value: userId },
     ]);
     if (user === null) {

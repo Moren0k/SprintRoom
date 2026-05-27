@@ -2,6 +2,7 @@ import { DeleteUserStoryHandler, GetUserStoryDetailHandler } from "../../../../s
 import { createAuthenticatedApplicationScope } from "../../../../src/server/application-scope";
 import { handleRouteError, noContent, ok, readJsonObject } from "../../../../src/server/http";
 import { requireString, requireUuid } from "../../../../src/server/validation";
+import { assertAuthenticatedMutation } from "../../../../src/server/security";
 
 interface UserStoryRouteContext {
   readonly params: Promise<{ readonly userStoryId: string }>;
@@ -24,6 +25,7 @@ export async function GET(request: Request, context: UserStoryRouteContext): Pro
 
 export async function DELETE(request: Request, context: UserStoryRouteContext): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const userStoryId = requireUuid((await context.params).userStoryId, "userStoryId");
     const body = await readJsonObject(request);
     const scope = await createAuthenticatedApplicationScope(request);

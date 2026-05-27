@@ -17,6 +17,13 @@ export async function apiRequest<T>(
   if (options.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
+  const method = (options.method ?? "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD" && !headers.has("X-CSRF-Token")) {
+    const csrfToken = readCookie("insforge_csrf_token");
+    if (csrfToken !== null) {
+      headers.set("X-CSRF-Token", csrfToken);
+    }
+  }
 
   const response = await fetch(path, {
     ...options,
@@ -81,4 +88,18 @@ function readErrorPayload(payload: unknown): { code?: string; message?: string }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  for (const cookie of document.cookie.split(";")) {
+    const [rawName, ...valueParts] = cookie.trim().split("=");
+    if (rawName === name) {
+      const value = valueParts.join("=");
+      return value.length > 0 ? decodeURIComponent(value) : null;
+    }
+  }
+  return null;
 }

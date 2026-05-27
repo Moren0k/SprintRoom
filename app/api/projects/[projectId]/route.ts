@@ -6,6 +6,7 @@ import {
 import { createAuthenticatedApplicationScope } from "../../../../src/server/application-scope";
 import { handleRouteError, noContent, ok, readJsonObject } from "../../../../src/server/http";
 import { optionalString, requireString, requireUuid } from "../../../../src/server/validation";
+import { assertAuthenticatedMutation } from "../../../../src/server/security";
 
 interface ProjectRouteContext {
   readonly params: Promise<{ readonly projectId: string }>;
@@ -29,6 +30,7 @@ export async function GET(request: Request, context: ProjectRouteContext): Promi
 
 export async function PATCH(request: Request, context: ProjectRouteContext): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const projectId = requireUuid((await context.params).projectId, "projectId");
     const body = await readJsonObject(request);
     const scope = await createAuthenticatedApplicationScope(request);
@@ -61,6 +63,7 @@ export async function PATCH(request: Request, context: ProjectRouteContext): Pro
 
 export async function DELETE(request: Request, context: ProjectRouteContext): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const projectId = requireUuid((await context.params).projectId, "projectId");
     const body = await readJsonObject(request);
     const scope = await createAuthenticatedApplicationScope(request);

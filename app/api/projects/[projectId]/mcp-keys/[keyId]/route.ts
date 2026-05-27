@@ -1,6 +1,7 @@
 import { createAuthenticatedApplicationScope } from "@/src/server/application-scope";
 import { handleRouteError, noContent, readJsonObject } from "@/src/server/http";
 import { requireString, requireUuid } from "@/src/server/validation";
+import { assertAuthenticatedMutation } from "@/src/server/security";
 import {
   DeactivateProjectMcpKeyHandler,
   DeleteProjectMcpKeyHandler,
@@ -15,6 +16,7 @@ export async function PATCH(
   context: McpKeyRouteContext,
 ): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const projectId = requireUuid((await context.params).projectId, "projectId");
     const keyId = requireUuid((await context.params).keyId, "keyId");
     const scope = await createAuthenticatedApplicationScope(request);
@@ -49,6 +51,7 @@ export async function DELETE(
   context: McpKeyRouteContext,
 ): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const projectId = requireUuid((await context.params).projectId, "projectId");
     const keyId = requireUuid((await context.params).keyId, "keyId");
     const scope = await createAuthenticatedApplicationScope(request);

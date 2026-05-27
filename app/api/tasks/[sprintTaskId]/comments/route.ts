@@ -2,6 +2,7 @@ import { AddTaskCommentHandler } from "../../../../../src/application";
 import { createAuthenticatedApplicationScope } from "../../../../../src/server/application-scope";
 import { created, handleRouteError, readJsonObject } from "../../../../../src/server/http";
 import { requireString, requireUuid } from "../../../../../src/server/validation";
+import { assertAuthenticatedMutation } from "../../../../../src/server/security";
 
 interface SprintTaskCommentsRouteContext {
   readonly params: Promise<{ readonly sprintTaskId: string }>;
@@ -12,6 +13,7 @@ export async function POST(
   context: SprintTaskCommentsRouteContext,
 ): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const sprintTaskId = requireUuid((await context.params).sprintTaskId, "sprintTaskId");
     const body = await readJsonObject(request);
     const scope = await createAuthenticatedApplicationScope(request);

@@ -14,6 +14,7 @@ import {
   requireUuid,
   requireUuidString,
 } from "../../../src/server/validation";
+import { assertAuthenticatedMutation } from "../../../src/server/security";
 
 export async function GET(request: Request): Promise<Response> {
   try {
@@ -50,6 +51,7 @@ export async function GET(request: Request): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const body = await readJsonObject(request);
     const scope = await createAuthenticatedApplicationScope(request);
     const result = await new CreateSprintTaskHandler(

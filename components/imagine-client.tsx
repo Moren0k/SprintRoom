@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button, Card, ErrorBanner, TextArea } from "./ui";
+import { readSafeExternalUrl } from "@/src/frontend/safe-url";
 
 interface Message {
   role: "user" | "assistant";
@@ -289,7 +290,23 @@ export default function ImagineClient() {
                   msg.content
                 ) : (
                   <div className="prose prose-sm max-w-none prose-headings:text-[var(--foreground)] prose-p:text-[var(--foreground)] prose-strong:text-[var(--foreground)] prose-code:text-[var(--foreground)] prose-code:bg-[var(--glass-strong)] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-[var(--glass-strong)] prose-pre:border prose-pre:border-[var(--hairline)] prose-li:text-[var(--foreground)] prose-a:text-[var(--foreground)] prose-a:underline">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({ href, children }) => {
+                          const safeHref = readSafeExternalUrl(href);
+                          return (
+                            <a
+                              href={safeHref ?? "#"}
+                              target={safeHref?.startsWith("http") ? "_blank" : undefined}
+                              rel={safeHref?.startsWith("http") ? "noopener noreferrer" : undefined}
+                            >
+                              {children}
+                            </a>
+                          );
+                        },
+                      }}
+                    >
                       {msg.content}
                     </ReactMarkdown>
                   </div>

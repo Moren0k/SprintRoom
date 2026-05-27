@@ -302,6 +302,7 @@ export class InsForgeProjectKeyRepository implements ProjectKeyRepository {
     return rows.map(row => ({
       id: row.id,
       projectId: row.project_id,
+      keyFingerprint: row.key_fingerprint ?? "",
       keyHash: row.key_hash,
       description: row.description,
       isActive: row.is_active,
@@ -318,6 +319,7 @@ export class InsForgeProjectKeyRepository implements ProjectKeyRepository {
     return {
       id: row.id,
       projectId: row.project_id,
+      keyFingerprint: row.key_fingerprint ?? "",
       keyHash: row.key_hash,
       description: row.description,
       isActive: row.is_active,
@@ -329,6 +331,7 @@ export class InsForgeProjectKeyRepository implements ProjectKeyRepository {
     await this.database.insertRows("project_keys", [{
       id: record.id,
       project_id: record.projectId,
+      key_fingerprint: record.keyFingerprint,
       key_hash: record.keyHash,
       description: record.description,
       is_active: record.isActive,

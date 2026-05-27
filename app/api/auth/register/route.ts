@@ -1,11 +1,13 @@
 import { createInsForgeServerClient } from "@/src/lib/insforge-server";
-import { createApplicationScope } from "@/src/server/application-scope";
+import { createAdminApplicationScope } from "@/src/server/application-scope";
 import { User } from "@/src/domain/aggregates/user";
 import { EmailAddress } from "@/src/domain/value-objects/email-address";
 import { PersonName } from "@/src/domain/value-objects/person-name";
 import { ApplicationError } from "@/src/application";
+import { readPasswordPolicyError } from "@/src/lib/auth/password-policy";
 import { created, handleRouteError, readJsonObject } from "@/src/server/http";
 import { requireString } from "@/src/server/validation";
+import { assertSameOriginMutation } from "@/src/server/security";
 import {
   checkRateLimit,
   getClientIp,
@@ -14,8 +16,9 @@ import {
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    assertSameOriginMutation(request);
     const ip = getClientIp(request);
-    const ipLimit = checkRateLimit("register", ip);
+    const ipLimit = await checkRateLimit("register", ip);
     if (!ipLimit.allowed) return rateLimitResponse(ipLimit.resetMs);
 
     const body = await readJsonObject(request);
@@ -23,10 +26,15 @@ export async function POST(request: Request): Promise<Response> {
     const email = requireString(body, "email").trim();
     const password = requireString(body, "password");
 
-    const emailLimit = checkRateLimit("register", email);
+    const passwordError = readPasswordPolicyError(password);
+    if (passwordError !== null) {
+      throw new ApplicationError(passwordError);
+    }
+
+    const emailLimit = await checkRateLimit("register", email);
     if (!emailLimit.allowed) return rateLimitResponse(emailLimit.resetMs);
 
-    const existingByEmail = await createApplicationScope().repositories.users.getByEmail(email);
+    const existingByEmail = await createAdminApplicationScope().repositories.users.getByEmail(email);
     if (existingByEmail !== null) {
       throw new ApplicationError("Ya existe un usuario registrado con ese correo.");
     }
@@ -42,7 +50,7 @@ export async function POST(request: Request): Promise<Response> {
       throw new ApplicationError(error?.message ?? "No se pudo crear la cuenta.");
     }
 
-    const scope = createApplicationScope();
+    const scope = createAdminApplicationScope();
     const newUser = User.registerPublic(
       PersonName.create(fullName),
       EmailAddress.create(email),

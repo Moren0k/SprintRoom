@@ -69,6 +69,7 @@ export interface TaskCommentRow {
 export interface ProjectKeyRow {
   readonly id: string;
   readonly project_id: string;
+  readonly key_fingerprint: string | null;
   readonly key_hash: string;
   readonly description: string;
   readonly is_active: boolean;

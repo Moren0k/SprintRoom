@@ -21,7 +21,7 @@ export default function HomePage() {
               href="/register"
               className="rounded-full px-2 py-1 transition hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25"
             >
-              Crear cuenta gratis
+              Crear cuenta
             </Link>
             <span className="text-[var(--hairline)]">|</span>
             <Link

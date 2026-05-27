@@ -7,6 +7,7 @@ import {
   getClientIp,
   rateLimitResponse,
 } from "../../../../src/server/rate-limit";
+import { assertAuthenticatedMutation } from "../../../../src/server/security";
 
 interface PlannedTaskInput {
   title: string;
@@ -21,8 +22,9 @@ interface PlannedUserStoryInput {
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const ip = getClientIp(request);
-    const ipLimit = checkRateLimit("imagine", ip);
+    const ipLimit = await checkRateLimit("imagine", ip);
     if (!ipLimit.allowed) return rateLimitResponse(ipLimit.resetMs);
 
     const body = await readJsonObject(request);

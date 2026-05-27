@@ -5,6 +5,7 @@ import {
 import { createAuthenticatedApplicationScope } from "../../../src/server/application-scope";
 import { handleRouteError, ok, readJsonObject } from "../../../src/server/http";
 import { requireString } from "../../../src/server/validation";
+import { assertAuthenticatedMutation } from "../../../src/server/security";
 
 export async function GET(request: Request): Promise<Response> {
   try {
@@ -20,6 +21,7 @@ export async function GET(request: Request): Promise<Response> {
 
 export async function PATCH(request: Request): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const body = await readJsonObject(request);
     const scope = await createAuthenticatedApplicationScope(request);
     const result = await new UpdateCurrentUserProfileHandler(

@@ -5,6 +5,7 @@ import {
   getClientIp,
   rateLimitResponse,
 } from "@/src/server/rate-limit";
+import { assertSameOriginMutation } from "@/src/server/security";
 
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -56,8 +57,9 @@ REGLAS ESTRICTAS:
 
 export async function POST(request: NextRequest) {
   try {
+    assertSameOriginMutation(request);
     const ip = getClientIp(request);
-    const ipLimit = checkRateLimit("imagine", ip);
+    const ipLimit = await checkRateLimit("imagine", ip);
     if (!ipLimit.allowed) return rateLimitResponse(ipLimit.resetMs);
 
     const body = await request.json().catch(() => ({}));

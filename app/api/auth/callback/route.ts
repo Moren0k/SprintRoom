@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createInsForgeServerClient } from "@/src/lib/insforge-server";
 import { setInsForgeSessionCookies } from "@/src/lib/insforge-cookies";
-import { createApplicationScope } from "@/src/server/application-scope";
+import { createAdminApplicationScope } from "@/src/server/application-scope";
 import { UserId } from "@/src/domain/ids/user-id";
 import { User } from "@/src/domain/aggregates/user";
 import { EmailAddress } from "@/src/domain/value-objects/email-address";
@@ -10,10 +10,11 @@ import {
   checkRateLimit,
   getClientIp,
 } from "@/src/server/rate-limit";
+import { readSafeAppPath } from "@/src/lib/auth/safe-redirect";
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request);
-  const ipLimit = checkRateLimit("callback", ip);
+  const ipLimit = await checkRateLimit("callback", ip);
   if (!ipLimit.allowed) {
     return NextResponse.redirect(
       new URL("/login?error=rate_limited", request.url),
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=no_email", request.url));
   }
 
-  const scope = createApplicationScope();
+  const scope = createAdminApplicationScope();
   const existingUser = await scope.repositories.users.getByEmail(userInfo.email.trim());
 
   if (existingUser === null) {
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
     await scope.repositories.unitOfWork.saveChanges();
   }
 
-  const response = NextResponse.redirect(new URL(readSafeNext(next), request.url));
+  const response = NextResponse.redirect(new URL(readSafeAppPath(next), request.url));
   setInsForgeSessionCookies(
     (name, value, options) => {
       response.cookies.set(name, value, options);
@@ -75,11 +76,4 @@ export async function GET(request: NextRequest) {
 
   response.cookies.delete("insforge_code_verifier");
   return response;
-}
-
-function readSafeNext(next: string): string {
-  if (!next.startsWith("/") || next.startsWith("//")) {
-    return "/dashboard";
-  }
-  return next;
 }

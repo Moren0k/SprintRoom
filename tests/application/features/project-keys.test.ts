@@ -47,6 +47,7 @@ describe("ProjectKeys", () => {
       projectKeys.keys.push({
         id: "key-1",
         projectId: project.id,
+        keyFingerprint: "fingerprint-1",
         keyHash: "hash-1",
         description: "Key 1",
         isActive: true,
@@ -81,6 +82,7 @@ describe("ProjectKeys", () => {
       projectKeys.keys.push({
         id: "key-1",
         projectId: project.id,
+        keyFingerprint: "fingerprint-1",
         keyHash: "secret-hash",
         description: "Key 1",
         isActive: true,
@@ -155,6 +157,7 @@ describe("ProjectKeys", () => {
 
       expect(projectKeys.keys.length).toBe(1);
       expect(projectKeys.keys[0].description).toBe("My key");
+      expect(projectKeys.keys[0].keyFingerprint).toBe("fingerprint::" + result.rawKey);
       expect(projectKeys.keys[0].keyHash).toBe("hash::" + result.rawKey);
     });
 
@@ -241,6 +244,7 @@ describe("ProjectKeys", () => {
       projectKeys.keys.push({
         id: "key-1",
         projectId: project.id,
+        keyFingerprint: "fingerprint-1",
         keyHash: "hash-1",
         description: "Key 1",
         isActive: true,
@@ -275,6 +279,7 @@ describe("ProjectKeys", () => {
       projectKeys.keys.push({
         id: "key-1",
         projectId: project.id,
+        keyFingerprint: "fingerprint-1",
         keyHash: "hash-1",
         description: "Key 1",
         isActive: true,
@@ -336,6 +341,7 @@ describe("ProjectKeys", () => {
       projectKeys.keys.push({
         id: "key-1",
         projectId: project.id,
+        keyFingerprint: "fingerprint-1",
         keyHash: "hash-1",
         description: "Delete me",
         isActive: true,
@@ -369,6 +375,7 @@ describe("ProjectKeys", () => {
       projectKeys.keys.push({
         id: "key-1",
         projectId: project.id,
+        keyFingerprint: "fingerprint-1",
         keyHash: "hash-1",
         description: "Delete me",
         isActive: true,
@@ -406,6 +413,7 @@ describe("ProjectKeys", () => {
       projectKeys.keys.push({
         id: "key-1",
         projectId: project.id,
+        keyFingerprint: "fingerprint-1",
         keyHash: "hash-1",
         description: "Delete me",
         isActive: true,

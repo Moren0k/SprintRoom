@@ -44,6 +44,15 @@ class FakeAuditDatabaseGateway implements InsForgeDatabaseGateway {
     );
   }
 
+  async rpc<T>(functionName: string, options: { args?: Record<string, unknown> } = {}): Promise<T> {
+    if (functionName === "delete_sprint_task_bundle") {
+      const retainedComments = ((options.args?.p_retained_comments as Record<string, unknown>[] | undefined) ?? []).map((row) => ({ ...row }));
+      await this.upsertRows("retained_task_comments", retainedComments);
+      return null as T;
+    }
+    return null as T;
+  }
+
   private table(name: string): Record<string, unknown>[] {
     const rows = this.tables.get(name) ?? [];
     this.tables.set(name, rows);

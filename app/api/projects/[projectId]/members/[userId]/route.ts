@@ -5,6 +5,7 @@ import {
 import { createAuthenticatedApplicationScope } from "../../../../../../src/server/application-scope";
 import { handleRouteError, noContent, ok } from "../../../../../../src/server/http";
 import { requireUuid } from "../../../../../../src/server/validation";
+import { assertAuthenticatedMutation } from "../../../../../../src/server/security";
 
 interface ProjectMemberRouteContext {
   readonly params: Promise<{ readonly projectId: string; readonly userId: string }>;
@@ -36,6 +37,7 @@ export async function DELETE(
   context: ProjectMemberRouteContext,
 ): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const params = await context.params;
     const projectId = requireUuid(params.projectId, "projectId");
     const userId = requireUuid(params.userId, "userId");

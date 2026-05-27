@@ -1,17 +1,9 @@
 /**
- * Rate limiter basado en sliding window con almacenamiento en memoria local.
+ * Rate limiter con store intercambiable.
  *
- * LIMITACIONES CONOCIDAS (MVP):
- * - La memoria no se comparte entre instancias serverless.
- * - En Vercel/Edge, cada cold start arranca con un mapa vacio; el limiter
- *   solo es efectivo dentro de la misma instancia durante su ciclo de vida.
- * - No recomendado para produccion multi-instancia sin Redis/Upstash.
- *
- * Para migrar a Redis/Upstash, implementar la interfaz RateLimitStore
- * y reemplazar InMemoryRateLimitStore.
+ * Produccion: requiere store distribuido.
+ * Desarrollo/tests: permite fallback en memoria para no bloquear el flujo local.
  */
-
-/* ===================== Tipos ====================== */
 
 export interface RateLimitResult {
   readonly allowed: boolean;
@@ -25,22 +17,20 @@ export interface RateLimitConfig {
 }
 
 export interface RateLimitStore {
-  check(key: string, config: RateLimitConfig): RateLimitResult;
+  check(key: string, config: RateLimitConfig): Promise<RateLimitResult>;
 }
-
-/* ===================== Configuraciones por namespace ====================== */
 
 export const RATE_LIMIT_CONFIGS = {
   auth: { windowMs: 15 * 60 * 1000, maxRequests: 10 },
   register: { windowMs: 15 * 60 * 1000, maxRequests: 5 },
   callback: { windowMs: 15 * 60 * 1000, maxRequests: 20 },
+  recovery: { windowMs: 15 * 60 * 1000, maxRequests: 5 },
   mcp: { windowMs: 60 * 1000, maxRequests: 120 },
   imagine: { windowMs: 60 * 1000, maxRequests: 20 },
+  chat: { windowMs: 60 * 1000, maxRequests: 15 },
 } as const satisfies Record<string, RateLimitConfig>;
 
 export type RateLimitNamespace = keyof typeof RATE_LIMIT_CONFIGS;
-
-/* ===================== In-memory store ====================== */
 
 interface RateLimitEntry {
   readonly count: number;
@@ -52,7 +42,7 @@ export class InMemoryRateLimitStore implements RateLimitStore {
   private lastCleanup = Date.now();
   private static readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
-  check(key: string, config: RateLimitConfig): RateLimitResult {
+  async check(key: string, config: RateLimitConfig): Promise<RateLimitResult> {
     const now = Date.now();
     this.periodicCleanup(now);
 
@@ -84,7 +74,6 @@ export class InMemoryRateLimitStore implements RateLimitStore {
     };
   }
 
-  /** Exposed for testing */
   get size(): number {
     return this.store.size;
   }
@@ -104,27 +93,98 @@ export class InMemoryRateLimitStore implements RateLimitStore {
   }
 }
 
-/* ===================== Default store singleton ====================== */
+export class UpstashRedisRateLimitStore implements RateLimitStore {
+  constructor(
+    private readonly restUrl: string,
+    private readonly restToken: string,
+  ) {}
+
+  async check(key: string, config: RateLimitConfig): Promise<RateLimitResult> {
+    const now = Date.now();
+    const windowStart = Math.floor(now / config.windowMs) * config.windowMs;
+    const windowEnd = windowStart + config.windowMs;
+    const bucketKey = `${key}:${windowStart}`;
+
+    const response = await fetch(`${this.restUrl}/pipeline`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.restToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([
+        ["INCR", bucketKey],
+        ["PEXPIREAT", bucketKey, String(windowEnd)],
+        ["PTTL", bucketKey],
+      ]),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error("No fue posible consultar el store distribuido de rate limit.");
+    }
+
+    const payload = await response.json() as Array<{ result?: string | number | null }>;
+    const count = Number(payload[0]?.result ?? 0);
+    const ttl = Number(payload[2]?.result ?? Math.max(windowEnd - now, 0));
+    const remaining = Math.max(config.maxRequests - count, 0);
+
+    return {
+      allowed: count <= config.maxRequests,
+      remaining,
+      resetMs: ttl > 0 ? ttl : Math.max(windowEnd - now, 0),
+    };
+  }
+}
 
 let defaultStore: RateLimitStore | null = null;
 
 export function getDefaultRateLimitStore(): RateLimitStore {
-  if (defaultStore === null) {
-    defaultStore = new InMemoryRateLimitStore();
+  if (defaultStore !== null) {
+    return defaultStore;
   }
+
+  const restUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const restToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (restUrl && restToken) {
+    defaultStore = new UpstashRedisRateLimitStore(
+      restUrl,
+      restToken,
+    );
+    return defaultStore;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Falta configurar UPSTASH_REDIS_REST_URL y UPSTASH_REDIS_REST_TOKEN para rate limiting distribuido.",
+    );
+  }
+
+  defaultStore = new InMemoryRateLimitStore();
   return defaultStore;
 }
 
-/* ===================== Helpers ====================== */
+export function setDefaultRateLimitStore(store: RateLimitStore | null): void {
+  defaultStore = store;
+}
 
 export function getClientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded !== null) {
-    const ip = forwarded.split(",")[0].trim();
-    if (ip.length > 0) return ip;
+  const flyClientIp = readSingleIp(request.headers.get("fly-client-ip"));
+  if (flyClientIp !== null) return flyClientIp;
+
+  const cloudflareIp = readSingleIp(request.headers.get("cf-connecting-ip"));
+  if (cloudflareIp !== null) return cloudflareIp;
+
+  const realIp = readSingleIp(request.headers.get("x-real-ip"));
+  if (realIp !== null) return realIp;
+
+  if (process.env.TRUST_PROXY_HEADERS === "true") {
+    const forwarded = request.headers.get("x-forwarded-for");
+    if (forwarded !== null) {
+      const ip = readSingleIp(forwarded.split(",")[0] ?? null);
+      if (ip !== null) return ip;
+    }
   }
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp !== null && realIp.length > 0) return realIp;
+
   return "unknown";
 }
 
@@ -132,17 +192,15 @@ export function buildRateLimitKey(namespace: RateLimitNamespace, identifier: str
   return `${namespace}:${identifier}`;
 }
 
-export function checkRateLimit(
+export async function checkRateLimit(
   namespace: RateLimitNamespace,
   identifier: string,
   store: RateLimitStore = getDefaultRateLimitStore(),
-): RateLimitResult {
+): Promise<RateLimitResult> {
   const config = RATE_LIMIT_CONFIGS[namespace];
   const key = buildRateLimitKey(namespace, identifier);
   return store.check(key, config);
 }
-
-/* ===================== Response builder ====================== */
 
 export function rateLimitResponse(resetMs: number): Response {
   const retryAfter = Math.ceil(resetMs / 1000);
@@ -162,4 +220,17 @@ export function rateLimitResponse(resetMs: number): Response {
       },
     },
   );
+}
+
+function readSingleIp(value: string | null): string | null {
+  if (value === null) return null;
+  const normalized = value.trim();
+  if (normalized.length === 0) return null;
+
+  const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+  const ipv6 = /^[0-9a-fA-F:]+$/;
+  if (!ipv4.test(normalized) && !ipv6.test(normalized)) {
+    return null;
+  }
+  return normalized;
 }

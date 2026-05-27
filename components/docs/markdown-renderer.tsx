@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ReactNode } from "react";
+import { readSafeExternalUrl } from "@/src/frontend/safe-url";
 
 export default function MarkdownRenderer({
   content,
@@ -32,7 +33,7 @@ export default function MarkdownRenderer({
           ),
           a: ({ href, children }) => (
             <a
-              href={href}
+              href={readSafeExternalUrl(href) ?? "#"}
               className="font-medium text-[var(--foreground)] underline underline-offset-2 decoration-[var(--hairline)] hover:decoration-[var(--foreground)] transition"
               target={href?.startsWith("http") ? "_blank" : undefined}
               rel={
@@ -85,7 +86,7 @@ export default function MarkdownRenderer({
           ),
           img: ({ src, alt }) => (
             <img
-              src={src}
+              src={typeof src === "string" ? readSafeExternalUrl(src) ?? "" : ""}
               alt={alt ?? ""}
               className="my-6 w-full rounded-2xl border border-[var(--hairline)]"
             />

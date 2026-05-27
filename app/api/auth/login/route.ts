@@ -1,6 +1,6 @@
 import { createInsForgeServerClient } from "@/src/lib/insforge-server";
 import { setInsForgeSessionCookies } from "@/src/lib/insforge-cookies";
-import { createApplicationScope } from "@/src/server/application-scope";
+import { createAdminApplicationScope } from "@/src/server/application-scope";
 import { User } from "@/src/domain/aggregates/user";
 import { EmailAddress } from "@/src/domain/value-objects/email-address";
 import { PersonName } from "@/src/domain/value-objects/person-name";
@@ -12,18 +12,20 @@ import {
   getClientIp,
   rateLimitResponse,
 } from "@/src/server/rate-limit";
+import { assertSameOriginMutation } from "@/src/server/security";
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    assertSameOriginMutation(request);
     const ip = getClientIp(request);
-    const ipLimit = checkRateLimit("auth", ip);
+    const ipLimit = await checkRateLimit("auth", ip);
     if (!ipLimit.allowed) return rateLimitResponse(ipLimit.resetMs);
 
     const body = await readJsonObject(request);
     const email = requireString(body, "email").trim();
     const password = requireString(body, "password");
 
-    const emailLimit = checkRateLimit("auth", email);
+    const emailLimit = await checkRateLimit("auth", email);
     if (!emailLimit.allowed) return rateLimitResponse(emailLimit.resetMs);
 
     const insforge = createInsForgeServerClient();
@@ -33,7 +35,7 @@ export async function POST(request: Request): Promise<Response> {
       throw new ApplicationError("Credenciales invalidas.");
     }
 
-    const scope = createApplicationScope();
+    const scope = createAdminApplicationScope();
     const existingUser = await scope.repositories.users.getByEmail(email);
 
     if (existingUser === null) {

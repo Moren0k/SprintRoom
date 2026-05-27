@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   InMemoryRateLimitStore,
   buildRateLimitKey,
@@ -6,94 +6,100 @@ import {
   getClientIp,
   rateLimitResponse,
   RATE_LIMIT_CONFIGS,
+  setDefaultRateLimitStore,
 } from "../../src/server/rate-limit";
 
+beforeEach(() => {
+  setDefaultRateLimitStore(null);
+  delete process.env.TRUST_PROXY_HEADERS;
+});
+
 describe("InMemoryRateLimitStore", () => {
-  it("permite requests dentro del limite", () => {
+  it("permite requests dentro del limite", async () => {
     const store = new InMemoryRateLimitStore();
     for (let i = 0; i < 10; i++) {
-      const result = store.check("test:user-1", { windowMs: 60_000, maxRequests: 10 });
+      const result = await store.check("test:user-1", { windowMs: 60_000, maxRequests: 10 });
       expect(result.allowed).toBe(true);
       expect(result.remaining).toBe(9 - i);
     }
   });
 
-  it("bloquea al exceder el limite", () => {
+  it("bloquea al exceder el limite", async () => {
     const store = new InMemoryRateLimitStore();
     const config = { windowMs: 60_000, maxRequests: 5 };
 
     for (let i = 0; i < 5; i++) {
-      const result = store.check("test:user-2", config);
+      const result = await store.check("test:user-2", config);
       expect(result.allowed).toBe(true);
     }
 
-    const blocked = store.check("test:user-2", config);
+    const blocked = await store.check("test:user-2", config);
     expect(blocked.allowed).toBe(false);
     expect(blocked.remaining).toBe(0);
     expect(blocked.resetMs).toBeGreaterThan(0);
   });
 
-  it("claves diferentes tienen contadores independientes", () => {
+  it("claves diferentes tienen contadores independientes", async () => {
     const store = new InMemoryRateLimitStore();
     const config = { windowMs: 60_000, maxRequests: 3 };
 
-    store.check("key-a", config);
-    store.check("key-a", config);
-    store.check("key-a", config);
+    await store.check("key-a", config);
+    await store.check("key-a", config);
+    await store.check("key-a", config);
 
-    const keyAResult = store.check("key-a", config);
+    const keyAResult = await store.check("key-a", config);
     expect(keyAResult.allowed).toBe(false);
 
-    const keyBResult = store.check("key-b", config);
+    const keyBResult = await store.check("key-b", config);
     expect(keyBResult.allowed).toBe(true);
     expect(keyBResult.remaining).toBe(2);
   });
 
-  it("reinicia ventana despues de windowMs", () => {
+  it("reinicia ventana despues de windowMs", async () => {
     vi.useFakeTimers();
     const store = new InMemoryRateLimitStore();
     const config = { windowMs: 60_000, maxRequests: 2 };
 
-    store.check("test:user-3", config);
-    store.check("test:user-3", config);
+    await store.check("test:user-3", config);
+    await store.check("test:user-3", config);
 
-    const blocked = store.check("test:user-3", config);
+    const blocked = await store.check("test:user-3", config);
     expect(blocked.allowed).toBe(false);
 
     vi.advanceTimersByTime(60_001);
 
-    const afterWindow = store.check("test:user-3", config);
+    const afterWindow = await store.check("test:user-3", config);
     expect(afterWindow.allowed).toBe(true);
     expect(afterWindow.remaining).toBe(1);
 
     vi.useRealTimers();
   });
 
-  it("reset limpia el store", () => {
+  it("reset limpia el store", async () => {
     const store = new InMemoryRateLimitStore();
     const config = { windowMs: 60_000, maxRequests: 1 };
 
-    store.check("test:reset-key", config);
+    await store.check("test:reset-key", config);
     expect(store.size).toBe(1);
 
     store.reset();
     expect(store.size).toBe(0);
 
-    const result = store.check("test:reset-key", config);
+    const result = await store.check("test:reset-key", config);
     expect(result.allowed).toBe(true);
   });
 
-  it("cleanup remueve entradas expiradas al hacer una nueva consulta", () => {
+  it("cleanup remueve entradas expiradas al hacer una nueva consulta", async () => {
     vi.useFakeTimers();
     const store = new InMemoryRateLimitStore();
     const config = { windowMs: 60_000, maxRequests: 1 };
 
-    store.check("test:old-key", config);
+    await store.check("test:old-key", config);
     expect(store.size).toBe(1);
 
     vi.advanceTimersByTime(6 * 60 * 1000);
 
-    store.check("test:new-key", config);
+    await store.check("test:new-key", config);
     expect(store.size).toBe(1);
 
     vi.useRealTimers();
@@ -101,55 +107,55 @@ describe("InMemoryRateLimitStore", () => {
 });
 
 describe("checkRateLimit", () => {
-  it("usa la configuracion por namespace", () => {
+  it("usa la configuracion por namespace", async () => {
     const store = new InMemoryRateLimitStore();
-    const result = checkRateLimit("mcp", "test-key", store);
+    const result = await checkRateLimit("mcp", "test-key", store);
     expect(result.allowed).toBe(true);
     expect(result.remaining).toBe(RATE_LIMIT_CONFIGS.mcp.maxRequests - 1);
   });
 
-  it("bloquea mcp al exceder 120 requests", () => {
+  it("bloquea mcp al exceder 120 requests", async () => {
     const store = new InMemoryRateLimitStore();
 
     for (let i = 0; i < RATE_LIMIT_CONFIGS.mcp.maxRequests; i++) {
-      const result = checkRateLimit("mcp", "mcp-heavy-user", store);
+      const result = await checkRateLimit("mcp", "mcp-heavy-user", store);
       expect(result.allowed).toBe(true);
     }
 
-    const blocked = checkRateLimit("mcp", "mcp-heavy-user", store);
+    const blocked = await checkRateLimit("mcp", "mcp-heavy-user", store);
     expect(blocked.allowed).toBe(false);
   });
 
-  it("bloquea auth login al exceder 10 requests", () => {
+  it("bloquea auth login al exceder 10 requests", async () => {
     const store = new InMemoryRateLimitStore();
 
     for (let i = 0; i < RATE_LIMIT_CONFIGS.auth.maxRequests; i++) {
-      checkRateLimit("auth", "test@example.com", store);
+      await checkRateLimit("auth", "test@example.com", store);
     }
 
-    const blocked = checkRateLimit("auth", "test@example.com", store);
+    const blocked = await checkRateLimit("auth", "test@example.com", store);
     expect(blocked.allowed).toBe(false);
   });
 
-  it("bloquea register al exceder 5 requests", () => {
+  it("bloquea register al exceder 5 requests", async () => {
     const store = new InMemoryRateLimitStore();
 
     for (let i = 0; i < RATE_LIMIT_CONFIGS.register.maxRequests; i++) {
-      checkRateLimit("register", "new@example.com", store);
+      await checkRateLimit("register", "new@example.com", store);
     }
 
-    const blocked = checkRateLimit("register", "new@example.com", store);
+    const blocked = await checkRateLimit("register", "new@example.com", store);
     expect(blocked.allowed).toBe(false);
   });
 
-  it("no afecta namespaces diferentes", () => {
+  it("no afecta namespaces diferentes", async () => {
     const store = new InMemoryRateLimitStore();
 
     for (let i = 0; i < RATE_LIMIT_CONFIGS.auth.maxRequests; i++) {
-      checkRateLimit("auth", "shared-email", store);
+      await checkRateLimit("auth", "shared-email", store);
     }
 
-    const mcpResult = checkRateLimit("mcp", "shared-email", store);
+    const mcpResult = await checkRateLimit("mcp", "shared-email", store);
     expect(mcpResult.allowed).toBe(true);
     expect(mcpResult.remaining).toBe(RATE_LIMIT_CONFIGS.mcp.maxRequests - 1);
   });
@@ -163,7 +169,15 @@ describe("buildRateLimitKey", () => {
 });
 
 describe("getClientIp", () => {
-  it("extrae IP de x-forwarded-for", () => {
+  it("no confia en x-forwarded-for por defecto", () => {
+    const request = new Request("https://example.com", {
+      headers: { "x-forwarded-for": "192.168.1.1, 10.0.0.1" },
+    });
+    expect(getClientIp(request)).toBe("unknown");
+  });
+
+  it("usa x-forwarded-for solo cuando se habilita trust proxy", () => {
+    process.env.TRUST_PROXY_HEADERS = "true";
     const request = new Request("https://example.com", {
       headers: { "x-forwarded-for": "192.168.1.1, 10.0.0.1" },
     });

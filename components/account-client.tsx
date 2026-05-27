@@ -27,6 +27,7 @@ export default function AccountClient() {
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [adminRole, setAdminRole] = useState<SystemRole>("Member");
   const [createdUserId, setCreatedUserId] = useState("");
 
@@ -58,8 +59,8 @@ export default function AccountClient() {
     setError("");
     setNotice("");
     setCreatedUserId("");
-    if (!adminName.trim() || !adminEmail.trim() || adminPassword.length < 8) {
-      setError("Completa nombre, correo y una contrasena de minimo 8 caracteres.");
+    if (!adminName.trim() || !adminEmail.trim() || !adminPassword || !currentPassword) {
+      setError("Completa todos los campos y confirma tu contrasena actual.");
       return;
     }
     setBusy(true);
@@ -72,6 +73,7 @@ export default function AccountClient() {
             fullName: adminName.trim(),
             email: adminEmail.trim(),
             password: adminPassword,
+            currentPassword,
             systemRole: adminRole,
           }),
         },
@@ -80,6 +82,7 @@ export default function AccountClient() {
       setAdminName("");
       setAdminEmail("");
       setAdminPassword("");
+      setCurrentPassword("");
       setAdminRole("Member");
       setNotice("Usuario administrativo creado.");
     } catch (err) {
@@ -142,6 +145,9 @@ export default function AccountClient() {
             <Field label="Contrasena">
               <TextInput type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} />
             </Field>
+            <Field label="Tu contrasena actual" hint="Se usa para reautenticar esta accion administrativa.">
+              <TextInput type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+            </Field>
             <Field label="Rol global">
               <Select value={adminRole} onChange={(event) => setAdminRole(event.target.value as SystemRole)}>
                 <option value="Member">Member</option>
@@ -149,7 +155,7 @@ export default function AccountClient() {
               </Select>
             </Field>
             <div className="lg:col-span-2">
-              <Button type="submit" disabled={busy || !adminName.trim() || !adminEmail.trim() || adminPassword.length < 8}>Crear usuario</Button>
+              <Button type="submit" disabled={busy || !adminName.trim() || !adminEmail.trim() || !adminPassword || !currentPassword}>Crear usuario</Button>
             </div>
           </form>
           {createdUserId.length > 0 && (

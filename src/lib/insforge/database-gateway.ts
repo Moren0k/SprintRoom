@@ -16,6 +16,10 @@ export interface WriteRowsOptions {
   readonly onConflict?: string;
 }
 
+export interface RpcOptions {
+  readonly args?: Record<string, unknown>;
+}
+
 export interface InsForgeDatabaseGateway {
   selectRows<T>(table: string, options?: SelectRowsOptions): Promise<T[]>;
   selectOne<T>(table: string, filters: ReadonlyArray<QueryFilter>): Promise<T | null>;
@@ -26,11 +30,13 @@ export interface InsForgeDatabaseGateway {
     options?: WriteRowsOptions,
   ): Promise<void>;
   deleteRows(table: string, filters: ReadonlyArray<QueryFilter>): Promise<void>;
+  rpc<T>(functionName: string, options?: RpcOptions): Promise<T>;
 }
 
 export interface InsForgeSdkClientLike {
   readonly database: {
     from(table: string): InsForgeTableQueryBuilder;
+    rpc(functionName: string, args?: Record<string, unknown>): InsForgeAwaitableQuery;
   };
 }
 
@@ -122,6 +128,14 @@ export class SdkInsForgeDatabaseGateway implements InsForgeDatabaseGateway {
     if (result.error !== null && result.error !== undefined) {
       throw new PersistenceError(`No fue posible eliminar registros en ${table}.`, result.error);
     }
+  }
+
+  async rpc<T>(functionName: string, options: RpcOptions = {}): Promise<T> {
+    const result = await this.client.database.rpc(functionName, options.args);
+    if (result.error !== null && result.error !== undefined) {
+      throw new PersistenceError(`No fue posible ejecutar la funcion ${functionName}.`, result.error);
+    }
+    return (result.data ?? null) as T;
   }
 
   private applyFilters(

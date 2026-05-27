@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { compareSync, hashSync } from "bcryptjs";
 import type { InsForgeDatabaseGateway, QueryFilter } from "../insforge/database-gateway";
 import type { ProjectKeyRow } from "../insforge/schema";
 import type { KeyHasher } from "../../application/abstractions/ports";
@@ -19,12 +20,20 @@ export interface ProjectKeyResolution {
 }
 
 export function hashProjectKey(key: string): string {
+  return hashSync(key, 12);
+}
+
+export function fingerprintProjectKey(key: string): string {
   return createHash("sha256").update(key, "utf-8").digest("hex");
 }
 
-export class Sha256KeyHasher implements KeyHasher {
+export class BcryptProjectKeyHasher implements KeyHasher {
   hash(key: string): string {
     return hashProjectKey(key);
+  }
+
+  fingerprint(key: string): string {
+    return fingerprintProjectKey(key);
   }
 }
 
@@ -39,10 +48,10 @@ export async function resolveProjectKey(
     );
   }
 
-  const keyHash = hashProjectKey(projectKey);
+  const fingerprint = fingerprintProjectKey(projectKey);
 
   const filters: ReadonlyArray<QueryFilter> = [
-    { operator: "eq", column: "key_hash", value: keyHash },
+    { operator: "eq", column: "key_fingerprint", value: fingerprint },
   ];
 
   const row = await database.selectOne<ProjectKeyRow>("project_keys", filters);
@@ -58,6 +67,20 @@ export async function resolveProjectKey(
     throw new McpAuthenticationError(
       "project_key_inactive",
       "La PROJECT_KEY esta desactivada. Contacta al administrador del proyecto.",
+    );
+  }
+
+  try {
+    if (!compareSync(projectKey, row.key_hash)) {
+      throw new McpAuthenticationError(
+        "invalid_project_key",
+        "La PROJECT_KEY proporcionada no es valida o no pertenece a ningun proyecto.",
+      );
+    }
+  } catch {
+    throw new McpAuthenticationError(
+      "invalid_project_key",
+      "La PROJECT_KEY proporcionada no es valida o no pertenece a ningun proyecto.",
     );
   }
 

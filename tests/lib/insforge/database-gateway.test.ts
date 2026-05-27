@@ -10,6 +10,9 @@ describe("SdkInsForgeDatabaseGateway", () => {
           fromCalled = true;
           throw new Error("The SDK should not be called for empty IN filters.");
         },
+        rpc() {
+          throw new Error("RPC should not be called in this test.");
+        },
       },
     });
 

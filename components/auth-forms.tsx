@@ -7,6 +7,8 @@ import { apiRequest, getErrorMessage } from "@/src/frontend/api-client";
 import type { AuthResult } from "@/src/frontend/types";
 import { Button, Card, ErrorBanner, Field, SuccessBanner, TextInput } from "./ui";
 import { initiateOAuth } from "@/src/lib/auth/oauth-actions";
+import { PASSWORD_POLICY_HINT, readPasswordPolicyError } from "@/src/lib/auth/password-policy";
+import { readSafeAppPath } from "@/src/lib/auth/safe-redirect";
 
 export function LoginForm() {
   const router = useRouter();
@@ -25,6 +27,12 @@ export function LoginForm() {
       }
       if (params.get("registered") === "1") {
         setNotice("Cuenta creada. Inicia sesion para continuar.");
+      }
+      if (params.get("verified") === "1") {
+        setNotice("Correo verificado. Ya puedes iniciar sesion.");
+      }
+      if (params.get("reset") === "1") {
+        setNotice("Contrasena actualizada. Inicia sesion con la nueva credencial.");
       }
     }, 0);
   }, []);
@@ -104,6 +112,11 @@ export function LoginForm() {
             placeholder="Tu contrasena"
           />
         </Field>
+        <div className="text-right text-sm">
+          <Link href="/forgot-password" className="font-medium text-[var(--foreground)] underline underline-offset-2">
+            Olvide mi contrasena
+          </Link>
+        </div>
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Entrando..." : "Entrar"}
         </Button>
@@ -123,8 +136,9 @@ export function RegisterForm() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    if (!fullName.trim() || !email.trim() || password.length < 8) {
-      setError("Completa el nombre, correo y una contrasena de minimo 8 caracteres.");
+    const passwordError = readPasswordPolicyError(password);
+    if (!fullName.trim() || !email.trim() || passwordError !== null) {
+      setError(passwordError ?? "Completa el nombre y el correo.");
       return;
     }
     setLoading(true);
@@ -138,7 +152,7 @@ export function RegisterForm() {
         }),
       });
       router.replace(
-        `/login?registered=1&email=${encodeURIComponent(email.trim())}`,
+        `/verify-email?email=${encodeURIComponent(email.trim())}`,
       );
     } catch (err) {
       setError(getErrorMessage(err));
@@ -196,7 +210,7 @@ export function RegisterForm() {
             placeholder="ana@empresa.com"
           />
         </Field>
-        <Field label="Contrasena" hint="Minimo 8 caracteres.">
+        <Field label="Contrasena" hint={PASSWORD_POLICY_HINT}>
           <TextInput
             type="password"
             autoComplete="new-password"
@@ -207,6 +221,211 @@ export function RegisterForm() {
         </Field>
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Creando cuenta..." : "Crear cuenta"}
+        </Button>
+      </form>
+    </AuthFrame>
+  );
+}
+
+export function VerifyEmailForm() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const emailParam = params.get("email");
+    window.setTimeout(() => {
+      if (emailParam !== null) {
+        setEmail(emailParam);
+      }
+    }, 0);
+  }, []);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    if (!email.trim() || otp.trim().length !== 6) {
+      setError("Ingresa el correo y el codigo de 6 digitos.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await apiRequest<{ verified: true }>("/api/auth/verify-email", {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim(), otp: otp.trim() }),
+      });
+      router.replace(`/login?verified=1&email=${encodeURIComponent(email.trim())}`);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resendCode() {
+    setError("");
+    setNotice("");
+    if (!email.trim()) {
+      setError("Ingresa tu correo para reenviar el codigo.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await apiRequest<{ success: true }>("/api/auth/resend-verification", {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      setNotice("Te enviamos un nuevo codigo de verificacion.");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AuthFrame
+      title="Verifica tu correo"
+      description="Te enviamos un codigo de 6 digitos. Ingresalo para activar tu cuenta."
+      footer={<Link href="/login" className="font-medium text-[var(--foreground)]">Volver al inicio de sesion</Link>}
+    >
+      <form onSubmit={submit} className="space-y-4">
+        <SuccessBanner message={notice} />
+        <ErrorBanner message={error} />
+        <Field label="Correo electronico">
+          <TextInput
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="ana@empresa.com"
+          />
+        </Field>
+        <Field label="Codigo de verificacion" hint="Revisa tu correo y copia el codigo de 6 digitos.">
+          <TextInput
+            inputMode="numeric"
+            pattern="[0-9]{6}"
+            autoComplete="one-time-code"
+            value={otp}
+            onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="123456"
+          />
+        </Field>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? "Verificando..." : "Verificar correo"}
+        </Button>
+        <Button type="button" variant="secondary" className="w-full" disabled={loading} onClick={resendCode}>
+          Reenviar codigo
+        </Button>
+      </form>
+    </AuthFrame>
+  );
+}
+
+export function ForgotPasswordForm() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [step, setStep] = useState<"request" | "reset">("request");
+
+  async function requestReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    if (!email.trim()) {
+      setError("Ingresa tu correo.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await apiRequest<{ success: true }>("/api/auth/request-password-reset", {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      setStep("reset");
+      setNotice("Te enviamos un codigo para restablecer tu contrasena.");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    const passwordError = readPasswordPolicyError(newPassword);
+    if (!email.trim() || code.trim().length !== 6 || passwordError !== null) {
+      setError(passwordError ?? "Ingresa el correo y el codigo de 6 digitos.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await apiRequest<{ success: true }>("/api/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim(), code: code.trim(), newPassword }),
+      });
+      router.replace(`/login?reset=1&email=${encodeURIComponent(email.trim())}`);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AuthFrame
+      title="Recupera tu acceso"
+      description="Solicita un codigo y define una nueva contrasena segura."
+      footer={<Link href="/login" className="font-medium text-[var(--foreground)]">Volver al inicio de sesion</Link>}
+    >
+      <form onSubmit={step === "request" ? requestReset : resetPassword} className="space-y-4">
+        <SuccessBanner message={notice} />
+        <ErrorBanner message={error} />
+        <Field label="Correo electronico">
+          <TextInput
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="ana@empresa.com"
+          />
+        </Field>
+        {step === "reset" && (
+          <>
+            <Field label="Codigo de recuperacion">
+              <TextInput
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                autoComplete="one-time-code"
+                value={code}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="123456"
+              />
+            </Field>
+            <Field label="Nueva contrasena" hint={PASSWORD_POLICY_HINT}>
+              <TextInput
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder="Nueva contrasena segura"
+              />
+            </Field>
+          </>
+        )}
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? "Procesando..." : step === "request" ? "Enviar codigo" : "Restablecer contrasena"}
         </Button>
       </form>
     </AuthFrame>
@@ -254,8 +473,9 @@ function AuthFrame({
 
 function readSafeNextUrl(): string | null {
   const next = new URLSearchParams(window.location.search).get("next");
-  if (next === null || !next.startsWith("/") || next.startsWith("//")) {
+  const safePath = readSafeAppPath(next, "");
+  if (safePath.length === 0) {
     return null;
   }
-  return next;
+  return safePath;
 }

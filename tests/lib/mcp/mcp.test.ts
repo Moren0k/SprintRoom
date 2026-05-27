@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { McpService, McpServiceError } from "../../../src/lib/mcp/service";
 import { InsForgeAuditLogger } from "../../../src/lib/audit/audit-logger";
-import { resolveProjectKey, hashProjectKey, McpAuthenticationError } from "../../../src/lib/mcp/auth";
+import { resolveProjectKey, hashProjectKey, fingerprintProjectKey, McpAuthenticationError } from "../../../src/lib/mcp/auth";
 import { parseToolArgs, McpDispatchError, MCP_TOOL_DEFINITIONS } from "../../../src/lib/mcp/tools";
 import { SprintTask } from "../../../src/domain/aggregates/sprint-task";
 import { TaskStatus } from "../../../src/domain/enums/task-status";
@@ -96,6 +96,10 @@ class FakeMcpDatabaseGateway implements InsForgeDatabaseGateway {
       table,
       this.table(table).filter((row) => !this.matches(row, filters)),
     );
+  }
+
+  async rpc<T>(): Promise<T> {
+    return null as T;
   }
 
   private table(name: string): Record<string, unknown>[] {
@@ -309,6 +313,7 @@ describe("MCP", () => {
         {
           id: PROJECT_KEY_ID_A,
           project_id: PROJECT_A_ID,
+          key_fingerprint: fingerprintProjectKey(VALID_PROJECT_KEY_A),
           key_hash: hashProjectKey(VALID_PROJECT_KEY_A),
           description: "Key for Project A",
           is_active: true,

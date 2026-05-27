@@ -37,6 +37,10 @@ class FakeReadDatabaseGateway implements InsForgeDatabaseGateway {
 
   async deleteRows(): Promise<void> {}
 
+  async rpc<T>(): Promise<T> {
+    return null as T;
+  }
+
   private matches(row: Record<string, unknown>, filters: ReadonlyArray<QueryFilter>): boolean {
     return filters.every((filter) => {
       if (filter.operator === "eq") {

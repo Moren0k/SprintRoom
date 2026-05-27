@@ -2,6 +2,7 @@ import { DeleteSprintTaskHandler, GetSprintTaskDetailHandler, UpdateTaskStatusHa
 import { createAuthenticatedApplicationScope } from "../../../../src/server/application-scope";
 import { handleRouteError, noContent, ok, readJsonObject } from "../../../../src/server/http";
 import { requireString, requireUuid } from "../../../../src/server/validation";
+import { assertAuthenticatedMutation } from "../../../../src/server/security";
 
 interface SprintTaskRouteContext {
   readonly params: Promise<{ readonly sprintTaskId: string }>;
@@ -23,6 +24,7 @@ export async function GET(request: Request, context: SprintTaskRouteContext): Pr
 
 export async function DELETE(request: Request, context: SprintTaskRouteContext): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const sprintTaskId = requireUuid((await context.params).sprintTaskId, "sprintTaskId");
     const body = await readJsonObject(request);
     const scope = await createAuthenticatedApplicationScope(request);
@@ -50,6 +52,7 @@ export async function DELETE(request: Request, context: SprintTaskRouteContext):
 
 export async function PATCH(request: Request, context: SprintTaskRouteContext): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const sprintTaskId = requireUuid((await context.params).sprintTaskId, "sprintTaskId");
     const body = await readJsonObject(request);
     const scope = await createAuthenticatedApplicationScope(request);

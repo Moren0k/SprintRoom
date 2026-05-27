@@ -9,11 +9,13 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "mcp-server": "tsx scripts/mcp-server.ts"
+    "mcp-server": "tsx scripts/mcp-server.ts",
+    "validate:rls": "tsx scripts/validate-staging-rls.ts"
   },
   "dependencies": {
     "@insforge/sdk": "^1.2.10",
     "@tailwindcss/typography": "^0.5.19",
+    "bcryptjs": "^3.0.3",
     "gray-matter": "^4.0.3",
     "next": "16.2.6",
     "openai": "^6.39.0",

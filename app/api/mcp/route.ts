@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createInsForgeDatabaseGateway, createInsForgeRepositoryScope } from "@/src/lib/insforge";
+import { createAdminInsForgeDatabaseGateway, createInsForgeRepositoryScope } from "@/src/lib/insforge";
 import { McpService } from "@/src/lib/mcp/service";
 import { resolveProjectKey } from "@/src/lib/mcp/auth";
 import { parseToolArgs, MCP_TOOL_DEFINITIONS } from "@/src/lib/mcp/tools";
@@ -58,7 +58,7 @@ export async function POST(request: Request): Promise<Response> {
   {
     const projectKey = request.headers.get("X-Project-Key")?.trim() ?? "";
     const identifier = projectKey.length > 0 ? projectKey : getClientIp(request);
-    const rl = checkRateLimit("mcp", identifier);
+    const rl = await checkRateLimit("mcp", identifier);
     if (!rl.allowed) {
       return rateLimitResponse(rl.resetMs);
     }
@@ -80,7 +80,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // 3. Validate PROJECT_KEY and resolve project
-    const database = createInsForgeDatabaseGateway();
+    const database = createAdminInsForgeDatabaseGateway();
     const { projectId, keyId } = await resolveProjectKey(database, projectKey);
     const auditLogger = new InsForgeAuditLogger(database);
     const clock = new SystemClock();

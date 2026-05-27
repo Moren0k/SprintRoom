@@ -1,7 +1,8 @@
 import { createAuthenticatedApplicationScope } from "@/src/server/application-scope";
 import { handleRouteError, created, ok, readJsonObject } from "@/src/server/http";
 import { requireString, requireUuid } from "@/src/server/validation";
-import { Sha256KeyHasher } from "@/src/lib/mcp/auth";
+import { BcryptProjectKeyHasher } from "@/src/lib/mcp/auth";
+import { assertAuthenticatedMutation } from "@/src/server/security";
 import {
   CreateProjectMcpKeyHandler,
   ListProjectMcpKeysHandler,
@@ -40,6 +41,7 @@ export async function POST(
   context: McpKeysRouteContext,
 ): Promise<Response> {
   try {
+    assertAuthenticatedMutation(request);
     const projectId = requireUuid((await context.params).projectId, "projectId");
     const scope = await createAuthenticatedApplicationScope(request);
 
@@ -49,7 +51,7 @@ export async function POST(
     const handler = new CreateProjectMcpKeyHandler(
       scope.repositories.projects,
       scope.repositories.projectKeys,
-      new Sha256KeyHasher(),
+      new BcryptProjectKeyHasher(),
     );
 
     const result = await handler.handle({

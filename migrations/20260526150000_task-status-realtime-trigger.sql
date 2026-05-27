@@ -27,7 +27,9 @@ BEGIN
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
+
+REVOKE EXECUTE ON FUNCTION notify_task_status_changed() FROM public;
 
 -- 3. Adjuntar trigger solo cuando el status cambia
 DROP TRIGGER IF EXISTS task_status_changed_trigger ON sprint_tasks;

@@ -313,10 +313,14 @@ export const MCP_TOOL_DEFINITIONS: ReadonlyArray<McpToolDefinition> = [
         tool: { type: "string", const: "create_task" },
         userStoryId: { type: "string", description: "UUID de la historia de usuario" },
         title: { type: "string", description: "Titulo de la tarea (max 160 caracteres)" },
-        description: { type: "string", description: "Descripcion de la tarea (opcional, max 2000 caracteres)" },
+        description: {
+          type: "string",
+          description:
+            "Descripcion detallada de la tarea (max 2000 caracteres). Incluye criterios de aceptacion en formato Given/When/Then y notas tecnicas de implementacion.",
+        },
         assigneeIds: { type: "array", items: { type: "string" }, description: "UUIDs de usuarios a asignar (opcional)" },
       },
-      required: ["tool", "userStoryId", "title"],
+      required: ["tool", "userStoryId", "title", "description"],
     },
   },
   {
@@ -545,8 +549,10 @@ export function parseToolArgs(body: Record<string, unknown>): McpToolArgument {
         throw new McpDispatchError("title es obligatorio.");
       }
       const description = body.description;
-      if (description !== undefined && typeof description !== "string") {
-        throw new McpDispatchError("description debe ser texto.");
+      if (typeof description !== "string" || description.trim().length === 0) {
+        throw new McpDispatchError(
+          "description es obligatorio. Incluye criterios de aceptacion (Given/When/Then) y notas tecnicas.",
+        );
       }
       const assigneeIds = body.assigneeIds;
       if (assigneeIds !== undefined) {
@@ -558,7 +564,7 @@ export function parseToolArgs(body: Record<string, unknown>): McpToolArgument {
         tool,
         userStoryId,
         title,
-        description: description as string | undefined,
+        description,
         assigneeIds: assigneeIds as ReadonlyArray<string> | undefined,
       } as CreateTaskArgs;
     }

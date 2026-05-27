@@ -63,6 +63,7 @@ export interface TaskAgentNoteRepository {
 export interface ProjectKeyRecord {
   readonly id: string;
   readonly projectId: string;
+  readonly keyFingerprint: string;
   readonly keyHash: string;
   readonly description: string;
   readonly isActive: boolean;
@@ -79,6 +80,7 @@ export interface ProjectKeyRepository {
 
 export interface KeyHasher {
   hash(key: string): string;
+  fingerprint(key: string): string;
 }
 
 export interface PasswordHasher {

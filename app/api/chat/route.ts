@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
+import { assertSameOriginMutation } from "@/src/server/security";
+import { checkRateLimit, getClientIp, rateLimitResponse } from "@/src/server/rate-limit";
 
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -36,6 +38,11 @@ Reglas de comportamiento:
 
 export async function POST(request: NextRequest) {
   try {
+    assertSameOriginMutation(request);
+    const ip = getClientIp(request);
+    const ipLimit = await checkRateLimit("chat", ip);
+    if (!ipLimit.allowed) return rateLimitResponse(ipLimit.resetMs);
+
     const body = await request.json().catch(() => ({}));
     const message =
       typeof body.message === "string" ? body.message.trim() : "";

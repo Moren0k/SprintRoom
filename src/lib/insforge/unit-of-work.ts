@@ -16,6 +16,12 @@ import {
 } from "./mappers";
 import type { RetainedTaskCommentRow } from "./schema";
 
+const SAVE_PROJECT_BUNDLE_RPC = "save_project_bundle";
+const SAVE_SPRINT_TASK_BUNDLE_RPC = "save_sprint_task_bundle";
+const DELETE_SPRINT_TASK_BUNDLE_RPC = "delete_sprint_task_bundle";
+const DELETE_USER_STORY_BUNDLE_RPC = "delete_user_story_bundle";
+const DELETE_PROJECT_BUNDLE_RPC = "delete_project_bundle";
+
 type TrackingState = "tracked" | "added" | "deleted";
 
 interface Tracked<T> {
@@ -85,12 +91,9 @@ export class InsForgeUnitOfWork implements UnitOfWork {
   }
 
   async saveChanges(): Promise<void> {
-    // InsForge SDK/PostgREST calls are applied sequentially here. This unit of
-    // work coordinates aggregate persistence but does not provide a database
-    // transaction boundary; callers must treat multi-table failures as partial.
-    await this.deleteRemovedSprintTasks();
-    await this.deleteRemovedUserStories();
     await this.deleteRemovedProjects();
+    await this.deleteRemovedUserStories();
+    await this.deleteRemovedSprintTasks();
     await this.saveUsers();
     await this.saveProjects();
     await this.saveUserStories();
@@ -114,21 +117,37 @@ export class InsForgeUnitOfWork implements UnitOfWork {
   }
 
   private async deleteRemovedSprintTasks(): Promise<void> {
+    const deletedProjectIds = new Set(
+      [...this.projects.values()]
+        .filter((tracked) => tracked.state === "deleted")
+        .map((tracked) => tracked.entity.id),
+    );
+    const deletedUserStoryIds = new Set(
+      [...this.userStories.values()]
+        .filter((tracked) => tracked.state === "deleted")
+        .map((tracked) => tracked.entity.id),
+    );
+
     for (const tracked of this.sprintTasks.values()) {
       if (tracked.state !== "deleted") continue;
-      await this.retainTaskCommentsBeforeDeletion(tracked.entity);
-      await this.database.deleteRows("sprint_tasks", [
-        { operator: "eq", column: "id", value: tracked.entity.id },
-      ]);
+      if (deletedProjectIds.has(tracked.entity.projectId) || deletedUserStoryIds.has(tracked.entity.userStoryId)) {
+        continue;
+      }
+      await this.database.rpc<void>(DELETE_SPRINT_TASK_BUNDLE_RPC, {
+        args: {
+          p_task_id: tracked.entity.id,
+          p_retained_comments: this.buildRetainedTaskCommentRows(tracked.entity),
+        },
+      });
     }
   }
 
-  private async retainTaskCommentsBeforeDeletion(task: SprintTask): Promise<void> {
+  private buildRetainedTaskCommentRows(task: SprintTask): RetainedTaskCommentRow[] {
     if (task.comments.length === 0) {
-      return;
+      return [];
     }
     const retainedOnUtc = (this.options.utcNow?.() ?? new Date()).toISOString();
-    const rows: RetainedTaskCommentRow[] = task.comments.map((comment) => ({
+    return task.comments.map((comment) => ({
       comment_id: comment.id,
       task_id: task.id,
       author_id: comment.authorId,
@@ -138,26 +157,52 @@ export class InsForgeUnitOfWork implements UnitOfWork {
       retained_by: this.options.actorId ?? null,
       reason: "task_deleted",
     }));
-    await this.database.upsertRows("retained_task_comments", rows, {
-      onConflict: "comment_id",
-    });
   }
 
   private async deleteRemovedUserStories(): Promise<void> {
+    const deletedProjectIds = new Set(
+      [...this.projects.values()]
+        .filter((tracked) => tracked.state === "deleted")
+        .map((tracked) => tracked.entity.id),
+    );
+
     for (const tracked of this.userStories.values()) {
       if (tracked.state !== "deleted") continue;
-      await this.database.deleteRows("user_stories", [
-        { operator: "eq", column: "id", value: tracked.entity.id },
-      ]);
+      if (deletedProjectIds.has(tracked.entity.projectId)) {
+        continue;
+      }
+
+      const retainedComments = [...this.sprintTasks.values()]
+        .filter((taskTracked) =>
+          taskTracked.state === "deleted" && taskTracked.entity.userStoryId === tracked.entity.id,
+        )
+        .flatMap((taskTracked) => this.buildRetainedTaskCommentRows(taskTracked.entity));
+
+      await this.database.rpc<void>(DELETE_USER_STORY_BUNDLE_RPC, {
+        args: {
+          p_user_story_id: tracked.entity.id,
+          p_retained_comments: retainedComments,
+        },
+      });
     }
   }
 
   private async deleteRemovedProjects(): Promise<void> {
     for (const tracked of this.projects.values()) {
       if (tracked.state !== "deleted") continue;
-      await this.database.deleteRows("projects", [
-        { operator: "eq", column: "id", value: tracked.entity.id },
-      ]);
+
+      const retainedComments = [...this.sprintTasks.values()]
+        .filter((taskTracked) =>
+          taskTracked.state === "deleted" && taskTracked.entity.projectId === tracked.entity.id,
+        )
+        .flatMap((taskTracked) => this.buildRetainedTaskCommentRows(taskTracked.entity));
+
+      await this.database.rpc<void>(DELETE_PROJECT_BUNDLE_RPC, {
+        args: {
+          p_project_id: tracked.entity.id,
+          p_retained_comments: retainedComments,
+        },
+      });
     }
   }
 
@@ -173,16 +218,12 @@ export class InsForgeUnitOfWork implements UnitOfWork {
       if (tracked.state === "deleted") continue;
       if (!hasChanged(tracked, snapshotProject)) continue;
       const project = tracked.entity;
-      await this.database.upsertRows("projects", [projectToRow(project)], {
-        onConflict: "id",
+      await this.database.rpc<void>(SAVE_PROJECT_BUNDLE_RPC, {
+        args: {
+          p_project: projectToRow(project),
+          p_members: project.members.map((member) => projectMemberToRow(project.id, member)),
+        },
       });
-      await this.database.deleteRows("project_members", [
-        { operator: "eq", column: "project_id", value: project.id },
-      ]);
-      await this.database.insertRows(
-        "project_members",
-        project.members.map((member) => projectMemberToRow(project.id, member)),
-      );
     }
   }
 
@@ -198,18 +239,13 @@ export class InsForgeUnitOfWork implements UnitOfWork {
       if (tracked.state === "deleted") continue;
       if (!hasChanged(tracked, snapshotSprintTask)) continue;
       const task = tracked.entity;
-      await this.database.upsertRows("sprint_tasks", [sprintTaskToRow(task)], {
-        onConflict: "id",
+      await this.database.rpc<void>(SAVE_SPRINT_TASK_BUNDLE_RPC, {
+        args: {
+          p_task: sprintTaskToRow(task),
+          p_assignments: sprintTaskAssignmentToRows(task),
+          p_comments: task.comments.map((comment) => taskCommentToRow(task.id, comment)),
+        },
       });
-      await this.database.deleteRows("sprint_task_assignments", [
-        { operator: "eq", column: "task_id", value: task.id },
-      ]);
-      await this.database.insertRows("sprint_task_assignments", sprintTaskAssignmentToRows(task));
-      await this.database.upsertRows(
-        "task_comments",
-        task.comments.map((comment) => taskCommentToRow(task.id, comment)),
-        { onConflict: "id" },
-      );
     }
   }
 

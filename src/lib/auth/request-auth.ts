@@ -17,6 +17,7 @@ export interface RefreshedSessionTokens {
 export interface ResolvedRequestSession {
   readonly requestContext: RequestContext;
   readonly refreshedSessionTokens: RefreshedSessionTokens | null;
+  readonly accessToken: string;
 }
 
 export type AuthenticationErrorCode =
@@ -75,6 +76,7 @@ export async function resolveRequestSessionFromRequest(
   return {
     requestContext: await createContextForInsForgeUser(data.user as InsForgeUser, dependencies),
     refreshedSessionTokens: null,
+    accessToken,
   };
 }
 
@@ -137,6 +139,7 @@ async function tryRefreshSession(
         ? data.refreshToken
         : null,
     },
+    accessToken: data.accessToken,
   };
 }
 

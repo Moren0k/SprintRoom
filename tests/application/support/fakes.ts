@@ -149,6 +149,7 @@ export class InMemoryTaskAgentNoteRepository implements TaskAgentNoteRepository 
 interface MutableProjectKeyRecord {
   id: string;
   projectId: string;
+  keyFingerprint: string;
   keyHash: string;
   description: string;
   isActive: boolean;
@@ -185,6 +186,10 @@ export class InMemoryProjectKeyRepository implements ProjectKeyRepository {
 export class FakeKeyHasher implements KeyHasher {
   hash(key: string): string {
     return `hash::${key}`;
+  }
+
+  fingerprint(key: string): string {
+    return `fingerprint::${key}`;
   }
 }
 
